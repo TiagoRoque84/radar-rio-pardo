@@ -44,6 +44,17 @@ genérico que aceite qualquer link da página inicial.
 - **Revisão:** o editor confere o texto original, reescreve o resumo no painel e
   salva como `IN_REVIEW`; o endpoint de publicação bloqueia diretamente
   `DRAFT_IMPORTED`. A IA não publica conteúdo.
+- **Integridade de datas e órgãos:** a data da listagem é a **publicação** e
+  não é automaticamente copiada para a data do ato; `GazetteAct.actDate`
+  permanece vazia quando a data não é confirmada no cabeçalho do texto
+  oficial. O coletor não atribui automaticamente os atos à Prefeitura,
+  pois podem incluir atos do Legislativo. Número de ato é confrontado com
+  o cabeçalho do texto antes de aceitar o trecho como verificado.
+- **Inspeção sem gravação:** o endpoint temporário do preview
+  `/api/diagnostics/diario-source?kind=Decretos&inspect=1`
+  mostra até 3 atos com título sanitizado, edição, data de publicação e
+  links oficiais; confere o cabeçalho de **um único texto** disponível,
+  sem conexão com o banco. Excluir esta rota antes de integrar à `main`.
 - **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
   a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
