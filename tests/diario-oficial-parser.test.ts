@@ -41,6 +41,10 @@ describe("Coletor estruturado do Diário Oficial: parser defensivo", () => {
     expect(acts).toHaveLength(1);
   });
 
+  it("não colapsa atos distintos com título truncado e links de texto diferentes", () => {
+    const second = row().replace(actLink, "https://www.dosp.com.br/leituratexto?p=OutroAto123");
+    expect(parseOfficialActListing(page(row(), second), "Portarias")).toHaveLength(2);
+  });
   it("recusa outra cidade e datas inválidas", () => {
     expect(() => parseOfficialActListing(
       "<h1>Diário Oficial de Mococa</h1><h2>Listar Atos</h2><table>" + row() + "</table>",
