@@ -8,7 +8,7 @@ O módulo de coleta (`src/lib/collectors/`) é independente dos demais módulos 
 
 | Chave do Adaptador | Fonte | URL | Método / Status |
 | --- | --- | --- | --- |
-| `imprensa-oficial-sjrp` | Diário Oficial Eletrônico de São José do Rio Pardo | `https://www.imprensaoficialmunicipal.com.br/sjriopardo` | Requisição HTTP GET ética com detecção de CAPTCHA e indexação de links públicos para revisão humana. Não há API JSON oficial documentada conhecida até o momento. |
+| `imprensa-oficial-sjrp` | Diário Oficial Eletrônico de São José do Rio Pardo | `https://www.imprensaoficialmunicipal.com.br/sjriopardo` | Leitura das listas estruturadas oficiais de Leis, Decretos e Portarias em `/listaatos.php?c=São José do Rio Pardo&s=...`; valida município/edição/URL e, quando disponível, consulta `/leituratexto` para capturar a ementa. Cria edição e ato em `DRAFT_IMPORTED`, sem publicação automática. Não cobre integralmente os PDFs. |
 | `pncp-api-sjrp` | Portal Nacional de Contratações Públicas (PNCP) | `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao` | **API REST pública oficial** filtrando pelo código IBGE `3549706` (São José do Rio Pardo) e parâmetro obrigatório `codigoModalidadeContratacao`, com paginação dinâmica completa, retries moderados (HTTP 429/5xx/timeout), checkpoint persistente, validação rigorosa de município/órgão via CNPJ e fila manual (`PENDING_CLASSIFICATION`) para órgãos não reconhecidos. |
 | `camara-sjrp-check` | Portal da Câmara Municipal | `https://camarasjriopardo.sp.gov.br/` | Monitor de disponibilidade HTTP. Coleta detalhada pendente de validação estrutural de dados abertos; utilizar cadastro/importação assistida no `/admin/camara`. |
 | `transparencia-prefeitura-check` | Portal da Transparência da Prefeitura | `https://saojosedoriopardo.sp.gov.br/portal-da-transparencia-home/` | Monitor de disponibilidade HTTP + importação assistida de planilhas/JSON oficiais. |
@@ -23,6 +23,33 @@ O módulo de coleta (`src/lib/collectors/`) é independente dos demais módulos 
 - **Status real de execução:** diferencia `NO_RECORDS` (HTTP 204 / zero itens), `IMPORTED`, `DUPLICATES_ONLY`, `PENDING_CLASSIFICATION`, `ALL_REJECTED` (registrado como `PARTIAL`, nunca `SUCCESS`), `PARTIAL_COMPLETION` e `FAILED`.
 
 ---
+
+## 1.2 Diário Oficial — Coleta estruturada e limites editoriais
+
+A página principal de edições é parcialmente dinâmica, mas o sistema oficial mantém as
+listas públicas de Leis, Decretos e Portarias. O coletor usa essas listas, não um regex
+genérico que aceite qualquer link da página inicial.
+
+- **Validação:** título, data (DD/MM/AAAA), número da edição, município, link oficial
+  com host permitido e, quando possível, ementa obtida na página pública de leitura.
+- **Limites operacionais:** até 12 itens recentes por tipo de ato, 6 detalhes por
+  execução e 40 segundos de processamento; execuções parciais são identificadas.
+- **Persistência:** os metadados entram em GazetteEdition e ImportedDocument;
+  cada ato é criado em GazetteAct com status `DRAFT_IMPORTED`.
+- **Revisão:** o editor confere o texto original, reescreve o resumo no painel e
+  salva como `IN_REVIEW`; o endpoint de publicação bloqueia diretamente
+  `DRAFT_IMPORTED`. A IA não publica conteúdo.
+- **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
+  a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
+- **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
+  Licitações, contratos, concursos, demais seções e atos não indexados nessas
+  três listas continuarão fora da coleta automática nesta etapa.
+- **Comprovação operacional:** os testes automatizados são baseados em fixtures;
+  antes da integração em produção, conferir uma coleta real na Hostinger e comparar
+  alguns documentos com os registros oficiais.
+
+Referência de consulta estruturada:
+https://www.imprensaoficialmunicipal.com.br/listaatos.php?c=São+José+do+Rio+Pardo&s=Decretos
 
 ## 2. Importação Manual Assistida
 
