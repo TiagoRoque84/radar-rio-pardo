@@ -61,11 +61,28 @@ describe("Camada de texto de PDF oficial - somente leitura", () => {
       fetchImpl: (async () => new Response("%PDF-1.7", {
         headers: {
           "content-type": "application/pdf",
-          "content-length": "6000000",
+          "content-length": "16000000",
         },
       })) as typeof fetch,
     });
     expect(r.status).toBe("PDF_TOO_LARGE");
+    expect(r.declaredBytes).toBe(16_000_000);
+    expect(r.limitBytes).toBe(12_000_000);
+    expect(r.bytesDownloaded).toBe(0);
+  });
+
+  it("interrompe transferência que ultrapassa 12 MB sem cabeçalho Content-Length", async () => {
+    const raw = new Uint8Array(12_000_001);
+    raw.set(new TextEncoder().encode("%PDF-1.7"), 0);
+    const r = await scanOfficialPdfForAct(item, {
+      fetchImpl: (async () => new Response(raw, {
+        headers: { "content-type": "application/pdf" },
+      })) as typeof fetch,
+    });
+    expect(r.status).toBe("PDF_TOO_LARGE");
+    expect(r.limitBytes).toBe(12_000_000);
+    expect(r.bytesDownloaded).toBeGreaterThan(12_000_000);
+    expect(r.databaseAccess).toBe(false);
   });
 
   it("identifica número e página no PDF sintético com texto pesquisável", async () => {
