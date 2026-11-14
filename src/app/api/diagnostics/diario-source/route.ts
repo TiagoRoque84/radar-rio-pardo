@@ -93,12 +93,13 @@ export async function GET(request: NextRequest) {
     // No database access; no raw text is ever returned.
     let pdfTextCheck: Awaited<ReturnType<typeof scanOfficialPdfForAct>> | null = null;
     const pdfMode = request.nextUrl.searchParams.get("pdf");
-    if (pdfMode === "2" || pdfMode === "3") {
+    if (pdfMode === "2" || pdfMode === "3" || pdfMode === "4") {
       const selected = listing.items.find(item => item.textUrl === null) ?? listing.items[0];
       if (selected) {
         pdfTextCheck = await scanOfficialPdfForAct(selected, {
           timeoutMs: 9000,
-          inspectPageSpan: pdfMode === "3",
+          inspectPageSpan: pdfMode === "3" || pdfMode === "4",
+          inspectTextSegment: pdfMode === "4",
         });
       }
     }
