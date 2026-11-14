@@ -50,7 +50,7 @@ async function collectOne(
   ctx: CollectorContext,
   categoryId: string,
   agencyId: string | null,
-  fetchDetail: boolean,
+  detailBudget: { remaining: number },
   logs: string[]
 ): Promise<"IMPORTED" | "DUPLICATE"> {
   const year = item.publicationDate.getUTCFullYear();
@@ -63,7 +63,8 @@ async function collectOne(
   if (previous) return "DUPLICATE";
 
   let extracted: ReturnType<typeof parseOfficialActText> = null;
-  if (fetchDetail && item.textUrl) {
+  if (detailBudget.remaining > 0 && item.textUrl) {
+    detailBudget.remaining--;
     try {
       const response = await fetchWithTimeout(item.textUrl, {
         timeoutMs: 5500,
@@ -158,7 +159,6 @@ export async function runImprensaOficialCollector(
   let imported = 0;
   let duplicates = 0;
   let errors = 0;
-  let detailRequests = 0;
   let kindSuccess = 0;
   let incomplete = false;
 
@@ -205,6 +205,7 @@ export async function runImprensaOficialCollector(
       kindSuccess++;
       found += items.length;
 
+      const detailBudget = { remaining: Math.ceil(MAX_DETAIL_REQUESTS / KINDS.length) };
       for (const item of items) {
         if (Date.now() - start > MAX_RUN_MS) {
           incomplete = true;
@@ -212,12 +213,9 @@ export async function runImprensaOficialCollector(
           break;
         }
 
-        const shouldFetchDetail =
-          item.textUrl !== null && detailRequests < MAX_DETAIL_REQUESTS;
-        if (shouldFetchDetail) detailRequests++;
         try {
           const result = await collectOne(
-            item, ctx, categoryId, agency?.id ?? null, shouldFetchDetail, logs
+            item, ctx, categoryId, agency?.id ?? null, detailBudget, logs
           );
           if (result === "IMPORTED") imported++;
           else duplicates++;
