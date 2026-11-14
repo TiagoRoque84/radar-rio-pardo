@@ -179,6 +179,59 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result, { status: 201 });
     }
 
+    // Um documento coletado automaticamente não é resumo editorial pronto.
+    // O editor precisa reescrever/conferir o texto antes de liberar publicação.
+    if (body.action === "REWRITE_IMPORTED_ACT") {
+      if (!canPublishContent(user.role)) {
+        return NextResponse.json({ error: "Sem permissão editorial." }, { status: 403 });
+      }
+      const actId = String(body.actId || "");
+      const title = String(body.titleSimple || "").trim();
+      const summary = String(body.objectiveSummary || "").trim();
+      if (title.length < 5 || title.length > 350 || summary.length < 25 || summary.length > 5000) {
+        return NextResponse.json(
+          { error: "Título ou resumo editorial inválido." }, { status: 400 }
+        );
+      }
+      if (
+        /^Ementa oficial \(revisão obrigatória\):/i.test(summary) ||
+        /^Ato identificado na listagem oficial/i.test(summary)
+      ) {
+        return NextResponse.json(
+          { error: "Reescreva e confira o resumo na fonte oficial antes de aprovar." },
+          { status: 400 }
+        );
+      }
+      const previous = await prisma.gazetteAct.findUnique({ where: { id: actId } });
+      if (!previous || previous.status !== "DRAFT_IMPORTED") {
+        return NextResponse.json(
+          { error: "Rascunho importado não encontrado ou já revisado." }, { status: 409 }
+        );
+      }
+      const maskedTitle = detectAndMaskPersonalData(title);
+      const maskedSummary = detectAndMaskPersonalData(summary);
+      const updated = await prisma.gazetteAct.update({
+        where: { id: actId },
+        data: {
+          titleSimple: maskedTitle.sanitizedText,
+          objectiveSummary: maskedSummary.sanitizedText,
+          status: "IN_REVIEW",
+          hasPersonalDataAlert:
+            previous.hasPersonalDataAlert ||
+            maskedTitle.hasPersonalData || maskedSummary.hasPersonalData,
+          reviewedById: user.id,
+          reviewedAt: new Date(),
+        },
+      });
+      await recordAuditLog({
+        userId: user.id,
+        action: "GAZETTE_IMPORTED_ACT_REWRITTEN",
+        entityType: "GazetteAct",
+        entityId: actId,
+      });
+      return NextResponse.json({ act: updated });
+    }
+
     if (body.action === "PUBLISH_ACT" || body.action === "REVIEW_ACT") {
       if (!canPublishContent(user.role)) {
         return NextResponse.json(
@@ -190,6 +243,20 @@ export async function POST(request: NextRequest) {
       const actId = String(body.actId || "");
       const targetStatus =
         body.action === "PUBLISH_ACT" ? "PUBLISHED" : "IN_REVIEW";
+
+      const candidate = await prisma.gazetteAct.findUnique({
+        where: { id: actId },
+        select: { status: true },
+      });
+      if (!candidate) {
+        return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
+      }
+      if (candidate.status === "DRAFT_IMPORTED") {
+        return NextResponse.json(
+          { error: "Este ato importado requer revisão e resumo editorial antes de publicar." },
+          { status: 409 }
+        );
+      }
 
       const updatedAct = await prisma.gazetteAct.update({
         where: { id: actId },
