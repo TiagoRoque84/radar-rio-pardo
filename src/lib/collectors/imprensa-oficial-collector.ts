@@ -9,6 +9,7 @@ import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import {
   OfficialActKind,
   ListedOfficialAct,
+  extractListingActNumber,
   parseOfficialActText,
 } from "./dioe-parser";
 import { fetchOfficialActListing } from "./dioe-reader";
@@ -37,17 +38,10 @@ function summaryForReview(title: string, ementa: string | null): string {
   );
 }
 
-function actNumberFromTitle(title: string): string | null {
-  const match = title.match(/^(?:lei|decreto|portaria)\s*(?:n[º°o.]*)?\s*(\d[\d.,/-]*)/i)
-    ?? title.match(/^(\d{3,6}(?:[.,]\d+)?)(?=\s*[-–—])/);
-  return match?.[1]?.slice(0, 80) ?? null;
-}
-
 async function collectOne(
   item: ListedOfficialAct,
   ctx: CollectorContext,
   categoryId: string,
-  agencyId: string | null,
   detailBudget: { remaining: number },
   logs: string[]
 ): Promise<"IMPORTED" | "DUPLICATE"> {
@@ -71,7 +65,9 @@ async function collectOne(
       if (response.ok) {
         const html = await response.text();
         if (html.length <= 500_000 && !/cf-turnstile|recaptcha/i.test(html)) {
-          extracted = parseOfficialActText(html, item.editionNumber);
+          extracted = parseOfficialActText(html, item.editionNumber, {
+            kind: item.kind, listingTitle: item.title,
+          });
         }
       } else {
         logs.push("Detalhe oficial indisponível (HTTP " + response.status + ") para edição " + item.editionNumber + ".");
@@ -97,7 +93,7 @@ async function collectOne(
         year,
         month: item.publicationDate.getUTCMonth() + 1,
         officialUrl: item.editionUrl,
-        agencyId,
+        agencyId: null, // Issuing agency is not established by the municipal listing.
         status: "PENDING_REVIEW",
       },
     });
@@ -121,9 +117,9 @@ async function collectOne(
       data: {
         editionId: edition.id,
         categoryId,
-        agencyId,
-        actNumber: actNumberFromTitle(item.title),
-        actDate: item.publicationDate,
+        agencyId: null, // Legislative acts may appear in the same municipal listing.
+        actNumber: extracted?.verifiedActNumber ?? extractListingActNumber(item.title),
+        actDate: extracted?.verifiedActDate ?? null,
         titleSimple: sanitizedTitle.slice(0, 350),
         objectiveSummary: summary.sanitizedText,
         rawExcerpt: excerpt?.sanitizedText ?? null,
@@ -160,12 +156,9 @@ export async function runImprensaOficialCollector(
   let kindSuccess = 0;
   let incomplete = false;
 
-  const [categories, agency] = await Promise.all([
-    prisma.gazetteActCategory.findMany({
-      where: { slug: { in: ["leis", "decretos", "portarias"] } },
-    }),
-    prisma.publicAgency.findFirst({ where: { acronym: "PMSJRP" } }),
-  ]);
+  const categories = await prisma.gazetteActCategory.findMany({
+    where: { slug: { in: ["leis", "decretos", "portarias"] } },
+  });
   const categoryIds = new Map(categories.map(c => [c.slug, c.id]));
 
   for (const kind of KINDS) {
@@ -214,7 +207,7 @@ export async function runImprensaOficialCollector(
 
         try {
           const result = await collectOne(
-            item, ctx, categoryId, agency?.id ?? null, detailBudget, logs
+            item, ctx, categoryId, detailBudget, logs
           );
           if (result === "IMPORTED") imported++;
           else duplicates++;
