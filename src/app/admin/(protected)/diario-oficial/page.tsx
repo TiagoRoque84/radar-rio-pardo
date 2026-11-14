@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, FileText, Upload } from "lucide-react";
+import { csrfJsonHeaders } from "@/lib/security/csrf-client";
 
 interface Edition {
   id: string;
@@ -14,6 +15,8 @@ interface Edition {
 
 interface Act {
   id: string;
+  objectiveSummary: string;
+  officialUrl: string;
   titleSimple: string;
   status: string;
   hasPersonalDataAlert: boolean;
@@ -64,6 +67,9 @@ export default function AdminDiarioOficialPage() {
 
   // Importação JSON
   const [batchJson, setBatchJson] = useState("");
+  const [editingActId, setEditingActId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftSummary, setDraftSummary] = useState("");
 
   async function loadData() {
     const res = await fetch("/api/admin/gazette");
@@ -92,7 +98,7 @@ export default function AdminDiarioOficialPage() {
     setFeedback("");
     const res = await fetch("/api/admin/gazette", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: csrfJsonHeaders(),
       body: JSON.stringify({
         action: "CREATE_EDITION",
         payload: { editionNumber, publicationDate, officialUrl },
@@ -113,7 +119,7 @@ export default function AdminDiarioOficialPage() {
     setFeedback("");
     const res = await fetch("/api/admin/gazette", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: csrfJsonHeaders(),
       body: JSON.stringify({
         action: "CREATE_ACT",
         payload: {
@@ -146,7 +152,7 @@ export default function AdminDiarioOficialPage() {
     setError("");
     const res = await fetch("/api/admin/gazette", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: csrfJsonHeaders(),
       body: JSON.stringify({ action: "PUBLISH_ACT", actId }),
     });
     const data = await res.json();
@@ -165,7 +171,7 @@ export default function AdminDiarioOficialPage() {
       const parsed = JSON.parse(batchJson);
       const res = await fetch("/api/admin/gazette", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfJsonHeaders(),
         body: JSON.stringify({ action: "BATCH_IMPORT", payload: parsed }),
       });
       const data = await res.json();
@@ -182,12 +188,66 @@ export default function AdminDiarioOficialPage() {
     }
   }
 
+  async function handleRewriteImportedAct(actId: string) {
+    setError("");
+    setFeedback("");
+    try {
+      const res = await fetch("/api/admin/gazette", {
+        method: "POST",
+        headers: csrfJsonHeaders(),
+        body: JSON.stringify({
+          action: "REWRITE_IMPORTED_ACT",
+          actId,
+          titleSimple: draftTitle,
+          objectiveSummary: draftSummary,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Não foi possível salvar a revisão.");
+        return;
+      }
+      setEditingActId(null);
+      setFeedback("Resumo editorial salvo para revisão. Confira o documento antes de publicar.");
+      await loadData();
+    } catch {
+      setError("Falha na comunicação ao salvar o resumo.");
+    }
+  }
+
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold flex items-center gap-2">
         <FileText className="h-6 w-6 text-radar-blue" />
         Gestão do Diário Oficial Municipal
       </h1>
+
+      <section className="radar-card p-5 space-y-3">
+        <h2 className="font-bold text-base">Edições registradas para conferência</h2>
+        <p className="text-sm text-radar-muted">
+          A coleta automática atual cobre apenas leis, decretos e portarias presentes na
+          lista estruturada da Imprensa Oficial. Não significa que o PDF inteiro foi lido.
+          Todos os atos importados exigem revisão editorial antes da publicação.
+        </p>
+        {editions.length === 0 ? (
+          <p className="text-sm text-radar-muted">Ainda não há edições cadastradas.</p>
+        ) : (
+          <div className="space-y-2">
+            {editions.slice(0, 12).map(ed => (
+              <div key={ed.id} className="flex flex-wrap items-center justify-between gap-2 rounded border border-radar-border p-2 text-sm">
+                <span>
+                  <strong>Edição {ed.editionNumber}</strong>{" "}
+                  ({ed.publicationDate.slice(0, 10)}) — {ed.totalActs} ato(s)
+                  <span className="ml-2 text-xs text-radar-muted">{ed.status}</span>
+                </span>
+                <a href={ed.officialUrl} target="_blank" rel="noopener noreferrer" className="text-radar-blue underline">
+                  Fonte oficial
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {feedback && (
         <div className="rounded-lg border border-emerald-400 bg-emerald-50 p-3 text-sm text-emerald-900">
@@ -392,13 +452,55 @@ export default function AdminDiarioOficialPage() {
                     <strong>{act.status}</strong>
                   </span>
                   <p className="font-medium">{act.titleSimple}</p>
+                  {act.status === "DRAFT_IMPORTED" && (
+                    <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+                      Rascunho automático. Não foi aprovado nem publicado.{" "}
+                      <a href={act.officialUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                        Consultar ato oficial
+                      </a>
+                    </p>
+                  )}
+                  {editingActId === act.id && (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        value={draftTitle}
+                        onChange={e => setDraftTitle(e.target.value)}
+                        aria-label="Título conferido do ato"
+                        className="w-full rounded border border-radar-border p-2 text-sm text-slate-900"
+                      />
+                      <textarea
+                        value={draftSummary}
+                        onChange={e => setDraftSummary(e.target.value)}
+                        aria-label="Resumo editorial conferido na fonte oficial"
+                        placeholder="Leia o documento original e escreva um resumo fiel, sem inferir consequências não comprovadas."
+                        rows={4}
+                        className="w-full rounded border border-radar-border p-2 text-sm text-slate-900"
+                      />
+                      <button type="button" onClick={() => handleRewriteImportedAct(act.id)}
+                        className="rounded bg-radar-navy px-3 py-2 text-xs font-semibold text-white">
+                        Salvar para revisão
+                      </button>
+                    </div>
+                  )}
                   {act.hasPersonalDataAlert && (
                     <span className="text-xs text-amber-700 font-semibold">
                       Alerta LGPD aplicado na extração.
                     </span>
                   )}
                 </div>
-                {act.status !== "PUBLISHED" && (
+                {act.status === "DRAFT_IMPORTED" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingActId(act.id);
+                      setDraftTitle(act.titleSimple);
+                      setDraftSummary("");
+                    }}
+                    className="rounded bg-radar-blue px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Conferir e redigir resumo
+                  </button>
+                ) : act.status !== "PUBLISHED" && (
                   <button
                     type="button"
                     onClick={() => handlePublishAct(act.id)}
