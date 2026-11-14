@@ -3,16 +3,14 @@ import {
   CollectorContext,
   CollectorResult,
   computeContentHash,
-  fetchWithTimeout,
 } from "./types";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import {
   OfficialActKind,
   ListedOfficialAct,
   extractListingActNumber,
-  parseOfficialActText,
 } from "./dioe-parser";
-import { fetchOfficialActListing } from "./dioe-reader";
+import { fetchOfficialActListing, fetchVerifiedOfficialActText } from "./dioe-reader";
 
 /**
  * Coletor estruturado da seção "Listar Atos" do Diário Oficial de São José do Rio Pardo.
@@ -54,26 +52,22 @@ async function collectOne(
   const previous = await prisma.importedDocument.findUnique({ where: { contentHash } });
   if (previous) return "DUPLICATE";
 
-  let extracted: ReturnType<typeof parseOfficialActText> = null;
+  let extracted: Awaited<ReturnType<typeof fetchVerifiedOfficialActText>> = null;
   if (detailBudget.remaining > 0 && item.textUrl) {
     detailBudget.remaining--;
     try {
-      const response = await fetchWithTimeout(item.textUrl, {
-        timeoutMs: 5500,
-        accept: "text/html",
-      });
-      if (response.ok) {
-        const html = await response.text();
-        if (html.length <= 500_000 && !/cf-turnstile|recaptcha/i.test(html)) {
-          extracted = parseOfficialActText(html, item.editionNumber, {
-            kind: item.kind, listingTitle: item.title,
-          });
-        }
-      } else {
-        logs.push("Detalhe oficial indisponível (HTTP " + response.status + ") para edição " + item.editionNumber + ".");
+      extracted = await fetchVerifiedOfficialActText(item, { timeoutMs: 5500 });
+      if (!extracted) {
+        logs.push(
+          item.kind + ", edição " + item.editionNumber +
+          ": texto oficial não verificado; manter apenas metadados para revisão."
+        );
       }
     } catch {
-      logs.push("Leitura do detalhe oficial não concluída para edição " + item.editionNumber + ".");
+      logs.push(
+        item.kind + ", edição " + item.editionNumber +
+        ": leitura do texto oficial indisponível; revisar manualmente."
+      );
     }
   }
 
