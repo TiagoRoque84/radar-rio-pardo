@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, AlertCircle, KeyRound } from "lucide-react";
+import { csrfJsonHeaders } from "@/lib/security/csrf-client";
 
 export function ChangePasswordForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -25,7 +26,7 @@ export function ChangePasswordForm() {
     try {
       const res = await fetch("/api/auth/change-password", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfJsonHeaders(),
         body: JSON.stringify({ currentPassword, newPassword }),
       });
 

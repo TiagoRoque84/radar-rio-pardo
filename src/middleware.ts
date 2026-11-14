@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { getRequiredAuthSecret } from "@/lib/env";
+import { CSRF_COOKIE_NAME, validateCsrfRequest } from "@/lib/security/csrf";
 
 const SESSION_COOKIE_NAME = "radar_rp_session";
 const PUBLIC_ADMIN_PATHS = ["/admin/login", "/admin/recuperar-senha"];
@@ -11,24 +12,6 @@ function isPublicAdminPath(pathname: string): boolean {
     (publicPath) =>
       pathname === publicPath || pathname.startsWith(`${publicPath}/`)
   );
-}
-
-function isSameOriginMutation(request: NextRequest): boolean {
-  const origin = request.headers.get("origin");
-  const expectedHost =
-    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
-    request.headers.get("host");
-
-  if (!origin || !expectedHost) {
-    return true;
-  }
-
-  try {
-    const parsedOrigin = new URL(origin);
-    return parsedOrigin.host.toLowerCase() === expectedHost.toLowerCase();
-  } catch {
-    return false;
-  }
 }
 
 async function hasValidJwtCookie(request: NextRequest): Promise<boolean> {
@@ -54,9 +37,10 @@ export async function middleware(request: NextRequest) {
     MUTATING_METHODS.has(request.method) &&
     (pathname.startsWith("/api/admin") || pathname.startsWith("/api/auth"))
   ) {
-    if (!isSameOriginMutation(request)) {
+    const csrf = validateCsrfRequest(request);
+    if (!csrf.valid) {
       return NextResponse.json(
-        { error: "Origem da requisição não autorizada (CSRF)." },
+        { error: csrf.reason || "Origem da requisição não autorizada (CSRF)." },
         { status: 403 }
       );
     }
@@ -77,7 +61,24 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  if (
+    request.method === "GET" &&
+    pathname.startsWith("/admin") &&
+    !request.cookies.get(CSRF_COOKIE_NAME)?.value
+  ) {
+    response.cookies.set({
+      name: CSRF_COOKIE_NAME,
+      value: crypto.randomUUID(),
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    });
+  }
+
+  return response;
 }
 
 export const config = {

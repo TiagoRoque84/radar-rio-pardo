@@ -58,27 +58,51 @@ const contractSchema = z.object({
   officialUrl: z.string().url(),
 });
 
+const classifyPendingSchema = z.object({
+  documentId: z.string().min(1),
+  agencyId: z.string().min(1),
+});
+
+const rejectPendingSchema = z.object({
+  documentId: z.string().min(1),
+  reason: z.string().max(400).optional(),
+});
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  const [biddings, contracts, agencies] = await Promise.all([
-    prisma.biddingProcess.findMany({
-      include: { agency: true },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-    }),
-    prisma.publicContract.findMany({
-      include: { agency: true, supplier: true },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-    }),
-    prisma.publicAgency.findMany({ orderBy: { name: "asc" } }),
-  ]);
+  const [biddings, contracts, agencies, pendingClassifications] =
+    await Promise.all([
+      prisma.biddingProcess.findMany({
+        include: { agency: true },
+        orderBy: { createdAt: "desc" },
+        take: 40,
+      }),
+      prisma.publicContract.findMany({
+        include: { agency: true, supplier: true },
+        orderBy: { createdAt: "desc" },
+        take: 40,
+      }),
+      prisma.publicAgency.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.importedDocument.findMany({
+        where: { extractionStatus: "PENDING_CLASSIFICATION" },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+    ]);
 
-  return NextResponse.json({ biddings, contracts, agencies });
+  return NextResponse.json({
+    biddings,
+    contracts,
+    agencies,
+    pendingClassifications,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -172,6 +196,176 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ contract }, { status: 201 });
+    }
+
+    if (body.action === "CLASSIFY_PNCP_DOCUMENT") {
+      const parsed = classifyPendingSchema.safeParse(body.payload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: "Informe o documento e o órgão público oficial." },
+          { status: 400 }
+        );
+      }
+
+      const [doc, agency] = await Promise.all([
+        prisma.importedDocument.findUnique({
+          where: { id: parsed.data.documentId },
+        }),
+        prisma.publicAgency.findUnique({
+          where: { id: parsed.data.agencyId },
+        }),
+      ]);
+
+      if (!doc || doc.extractionStatus !== "PENDING_CLASSIFICATION") {
+        return NextResponse.json(
+          { error: "Registro pendente não encontrado ou já classificado." },
+          { status: 404 }
+        );
+      }
+
+      if (!agency || !agency.active) {
+        return NextResponse.json(
+          { error: "Órgão público selecionado é inválido ou está inativo." },
+          { status: 400 }
+        );
+      }
+
+      let meta: Record<string, unknown> = {};
+      try {
+        meta = doc.rawText ? JSON.parse(doc.rawText) : {};
+      } catch {
+        return NextResponse.json(
+          { error: "Metadados originais do PNCP corrompidos neste registro." },
+          { status: 400 }
+        );
+      }
+
+      const pncpId =
+        typeof meta.pncpId === "string" && meta.pncpId
+          ? meta.pncpId
+          : doc.externalId || doc.id;
+      const processNumber =
+        typeof meta.processNumber === "string" && meta.processNumber
+          ? meta.processNumber
+          : pncpId;
+      const modality =
+        typeof meta.modality === "string" && meta.modality
+          ? meta.modality
+          : "Licitação PNCP";
+      const baseObject =
+        typeof meta.objectDescription === "string" && meta.objectDescription
+          ? meta.objectDescription
+          : "Objeto informado no documento oficial do PNCP.";
+      const organLabel =
+        typeof meta.organName === "string" && meta.organName
+          ? meta.organName
+          : doc.title;
+      const unitLabel =
+        typeof meta.unitName === "string" && meta.unitName
+          ? ` (Unidade: ${meta.unitName} — ${organLabel})`
+          : ` (Órgão PNCP: ${organLabel})`;
+      const statusLabel =
+        typeof meta.status === "string" && meta.status
+          ? meta.status
+          : "Publicada";
+      const pubDate =
+        typeof meta.publicationDate === "string" && meta.publicationDate
+          ? new Date(meta.publicationDate)
+          : null;
+      const openDate =
+        typeof meta.openingDate === "string" && meta.openingDate
+          ? new Date(meta.openingDate)
+          : null;
+      const estimatedValue =
+        typeof meta.estimatedValue === "string" &&
+        decimalRegex.test(meta.estimatedValue)
+          ? meta.estimatedValue
+          : null;
+      const officialUrl =
+        typeof meta.officialUrl === "string" && meta.officialUrl.startsWith("http")
+          ? meta.officialUrl
+          : doc.originalUrl;
+
+      const existingBidding = await prisma.biddingProcess.findFirst({
+        where: {
+          OR: [{ pncpId }, { agencyId: agency.id, processNumber }],
+        },
+      });
+
+      const bidding = existingBidding
+        ? existingBidding
+        : await prisma.biddingProcess.create({
+            data: {
+              agencyId: agency.id,
+              processNumber: processNumber.slice(0, 78),
+              modality: modality.slice(0, 118),
+              objectDescription: `${baseObject}${unitLabel}`,
+              status: statusLabel.slice(0, 78),
+              publicationDate:
+                pubDate && !Number.isNaN(pubDate.getTime()) ? pubDate : null,
+              openingDate:
+                openDate && !Number.isNaN(openDate.getTime()) ? openDate : null,
+              estimatedValue,
+              officialUrl: officialUrl.slice(0, 690),
+              pncpId,
+            },
+          });
+
+      await prisma.importedDocument.update({
+        where: { id: doc.id },
+        data: { extractionStatus: "CLASSIFIED" },
+      });
+
+      await recordAuditLog({
+        userId: user.id,
+        action: "PNCP_BIDDING_CLASSIFIED",
+        entityType: "ImportedDocument",
+        entityId: doc.id,
+        details: {
+          biddingId: bidding.id,
+          agencyId: agency.id,
+          agencyName: agency.name,
+          pncpId,
+        },
+      });
+
+      return NextResponse.json({ ok: true, bidding });
+    }
+
+    if (body.action === "REJECT_PNCP_DOCUMENT") {
+      const parsed = rejectPendingSchema.safeParse(body.payload);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: "Informe o identificador do documento." },
+          { status: 400 }
+        );
+      }
+
+      const doc = await prisma.importedDocument.findUnique({
+        where: { id: parsed.data.documentId },
+      });
+
+      if (!doc || doc.extractionStatus !== "PENDING_CLASSIFICATION") {
+        return NextResponse.json(
+          { error: "Registro pendente não encontrado." },
+          { status: 404 }
+        );
+      }
+
+      await prisma.importedDocument.update({
+        where: { id: doc.id },
+        data: { extractionStatus: "REJECTED" },
+      });
+
+      await recordAuditLog({
+        userId: user.id,
+        action: "PNCP_BIDDING_REJECTED",
+        entityType: "ImportedDocument",
+        entityId: doc.id,
+        details: { reason: parsed.data.reason || "Descartado na revisão editorial." },
+      });
+
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ error: "Ação inválida." }, { status: 400 });

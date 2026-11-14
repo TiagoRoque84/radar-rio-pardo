@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Play, RefreshCw, ExternalLink } from "lucide-react";
+import { csrfJsonHeaders } from "@/lib/security/csrf-client";
 
 interface Adapter {
   id: string;
@@ -24,8 +25,41 @@ interface RunLog {
   itemsFound: number;
   itemsProcessed: number;
   itemsDuplicated: number;
+  errorCount: number;
   logText: string | null;
+  checkpointJson: string | null;
   adapter: { name: string };
+}
+
+interface CheckpointMeta {
+  outcome?: string;
+  itemsRejected?: number;
+  rejectedItems?: number;
+  itemsPendingClassification?: number;
+  pendingClassificationItems?: number;
+  hasPendingPages?: boolean;
+  incomplete?: boolean;
+  pendingModalities?: number[];
+  rejectionBreakdown?: Record<string, number>;
+}
+
+const OUTCOME_LABELS: Record<string, string> = {
+  NO_RECORDS: "Nenhum registro novo no período",
+  IMPORTED: "Registros validados e importados",
+  DUPLICATES_ONLY: "Apenas registros já existentes (duplicados)",
+  PENDING_CLASSIFICATION: "Registros retidos para classificação de órgão",
+  ALL_REJECTED: "Todos os registros encontrados foram rejeitados",
+  PARTIAL_COMPLETION: "Execução parcial / páginas ou rejeições pendentes",
+  FAILED: "Falha de integração",
+};
+
+function parseRunCheckpoint(raw: string | null): CheckpointMeta {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as CheckpointMeta;
+  } catch {
+    return {};
+  }
 }
 
 export default function AdminIntegracoesPage() {
@@ -54,15 +88,18 @@ export default function AdminIntegracoesPage() {
     try {
       const res = await fetch("/api/admin/collectors/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfJsonHeaders(),
         body: JSON.stringify({ adapterKey }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Erro ao executar sincronização.");
       } else {
+        const outcomeLabel = data.outcome
+          ? ` [${OUTCOME_LABELS[data.outcome] || data.outcome}]`
+          : "";
         setMessage(
-          `Execução (${adapterKey}): ${data.status} — Encontrados: ${data.itemsFound}, Novos: ${data.itemsProcessed}, Duplicados: ${data.itemsDuplicated}`
+          `Execução (${adapterKey}): ${data.status}${outcomeLabel} — Encontrados: ${data.itemsFound}, Novos: ${data.itemsProcessed}, Duplicados: ${data.itemsDuplicated}, Rejeitados: ${data.itemsRejected ?? 0}, Pendentes de órgão: ${data.itemsPendingClassification ?? 0}`
         );
       }
       await load();
@@ -125,7 +162,7 @@ export default function AdminIntegracoesPage() {
                 <code>{ad.frequencyCron}</code>
               </p>
               <p>
-                Registros coletados: <strong>{ad.recordsCount}</strong> • Última
+                Registros importados: <strong>{ad.recordsCount}</strong> • Última
                 execução:{" "}
                 {ad.lastRunAt
                   ? new Date(ad.lastRunAt).toLocaleString("pt-BR")
@@ -160,27 +197,70 @@ export default function AdminIntegracoesPage() {
               &ldquo;Sincronizar&rdquo; para testar a coleta real em uma fonte.
             </p>
           ) : (
-            runs.map((run) => (
-              <details
-                key={run.id}
-                className="rounded-lg border border-radar-border p-3 text-xs"
-              >
-                <summary className="cursor-pointer font-semibold flex flex-wrap items-center justify-between gap-2">
-                  <span>
-                    {run.adapter.name} — {run.status} ({run.triggerType})
-                  </span>
-                  <span className="text-radar-muted">
-                    {new Date(run.startedAt).toLocaleString("pt-BR")} | Novos:{" "}
-                    {run.itemsProcessed} | Duplicados: {run.itemsDuplicated}
-                  </span>
-                </summary>
-                {run.logText && (
-                  <pre className="mt-2 rounded bg-slate-900 text-slate-100 p-3 overflow-x-auto whitespace-pre-wrap">
-                    {run.logText}
-                  </pre>
-                )}
-              </details>
-            ))
+            runs.map((run) => {
+              const cp = parseRunCheckpoint(run.checkpointJson);
+              const rejected = cp.itemsRejected ?? cp.rejectedItems ?? 0;
+              const pendingOrg =
+                cp.itemsPendingClassification ??
+                cp.pendingClassificationItems ??
+                0;
+              const outcomeText = cp.outcome
+                ? OUTCOME_LABELS[cp.outcome] || cp.outcome
+                : null;
+              const breakdownEntries = cp.rejectionBreakdown
+                ? Object.entries(cp.rejectionBreakdown)
+                : [];
+
+              return (
+                <details
+                  key={run.id}
+                  className="rounded-lg border border-radar-border p-3 text-xs"
+                >
+                  <summary className="cursor-pointer font-semibold flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {run.adapter.name} — {run.status} ({run.triggerType})
+                      {outcomeText ? ` • ${outcomeText}` : ""}
+                    </span>
+                    <span className="text-radar-muted">
+                      {new Date(run.startedAt).toLocaleString("pt-BR")} |
+                      Encontrados: {run.itemsFound} | Novos:{" "}
+                      {run.itemsProcessed} | Duplicados: {run.itemsDuplicated} |
+                      Rejeitados: {rejected} | Pendentes Órgão: {pendingOrg} |
+                      Erros: {run.errorCount}
+                    </span>
+                  </summary>
+
+                  {(cp.hasPendingPages || cp.incomplete) && (
+                    <div className="mt-2 rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-2.5 py-1.5 text-amber-900 dark:text-amber-200">
+                      Checkpoint ativo: há páginas/modalidades pendentes (
+                      {cp.pendingModalities?.join(", ") || "ver log"}) que serão
+                      retomadas na próxima execução.
+                    </div>
+                  )}
+
+                  {breakdownEntries.length > 0 && (
+                    <div className="mt-2 rounded border border-radar-border bg-radar-surface dark:bg-slate-800/60 p-2.5 space-y-1">
+                      <p className="font-semibold">
+                        Motivos de rejeição ou retenção:
+                      </p>
+                      <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                        {breakdownEntries.map(([reason, qty]) => (
+                          <li key={reason}>
+                            <strong>{qty}x</strong> — {reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {run.logText && (
+                    <pre className="mt-2 rounded bg-slate-900 text-slate-100 p-3 overflow-x-auto whitespace-pre-wrap">
+                      {run.logText}
+                    </pre>
+                  )}
+                </details>
+              );
+            })
           )}
         </div>
       </section>

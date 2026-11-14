@@ -1,10 +1,24 @@
 import crypto from "node:crypto";
 
+export type CollectionOutcome =
+  | "NO_RECORDS"
+  | "IMPORTED"
+  | "DUPLICATES_ONLY"
+  | "PENDING_CLASSIFICATION"
+  | "ALL_REJECTED"
+  | "PARTIAL_COMPLETION"
+  | "FAILED";
+
 export interface CollectorResult {
   status: "SUCCESS" | "PARTIAL" | "ERROR";
+  outcome?: CollectionOutcome;
   itemsFound: number;
   itemsProcessed: number;
   itemsDuplicated: number;
+  itemsRejected?: number;
+  itemsPendingClassification?: number;
+  rejectionBreakdown?: Record<string, number>;
+  hasPendingPages?: boolean;
   errorCount: number;
   logText: string;
   checkpoint?: Record<string, unknown>;
@@ -17,6 +31,7 @@ export interface CollectorContext {
   sourceUrl: string;
   agencyId: string;
   runId: string;
+  previousCheckpoint?: Record<string, unknown> | null;
 }
 
 export function computeContentHash(input: string): string {
@@ -28,16 +43,17 @@ export const RADAR_USER_AGENT =
 
 export async function fetchWithTimeout(
   url: string,
-  options: { timeoutMs?: number; accept?: string } = {}
+  options: { timeoutMs?: number; accept?: string; fetchImpl?: typeof fetch } = {}
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
     options.timeoutMs ?? 15000
   );
+  const fetchFn = options.fetchImpl ?? fetch;
 
   try {
-    return await fetch(url, {
+    return await fetchFn(url, {
       method: "GET",
       signal: controller.signal,
       headers: {

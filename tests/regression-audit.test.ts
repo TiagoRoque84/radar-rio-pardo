@@ -133,14 +133,17 @@ describe("Regressão Técnica — IBGE, PNCP, Segurança e Schema MySQL", () => 
       { id: "feuc", acronym: "FEUC", name: "FEUC" },
     ];
     expect(
-      matchAgencyByOrganName("Câmara Municipal de São José do Rio Pardo", agencies, "pmsjrp")
+      matchAgencyByOrganName("Câmara Municipal de São José do Rio Pardo", agencies)
     ).toBe("cmsjrp");
     expect(
-      matchAgencyByOrganName("Serviço Autônomo de Água e Esgoto - SAERP", agencies, "pmsjrp")
+      matchAgencyByOrganName("Serviço Autônomo de Água e Esgoto - SAERP", agencies)
     ).toBe("saerp");
     expect(
-      matchAgencyByOrganName("Fundação Educacional e Cultural", agencies, "pmsjrp")
+      matchAgencyByOrganName("Fundação Educacional e Cultural", agencies)
     ).toBe("feuc");
+    expect(
+      matchAgencyByOrganName("Consórcio Público Não Cadastrado", agencies)
+    ).toBeNull();
   });
 
   it("rejeita senhas padrão antigas ou fracas e valida segredos de ambiente", () => {

@@ -64,6 +64,9 @@ npm run auth:reset-password -- --email=admin@radarriopardo.com.br
 
 ---
 
-## 6. Conferência Territorial (São José do Rio Pardo)
+## 6. Conferência Territorial, Classificação de Órgãos e Segurança CSRF
 
-- Confirme sempre que `MUNICIPALITY_IBGE_CODE="3549706"` no `.env`. O coletor PNCP rejeita registros retornados para qualquer outro código IBGE ou município divergente.
+- **Código IBGE oficial:** confirme sempre que `MUNICIPALITY_IBGE_CODE="3549706"` e `NEXT_PUBLIC_APP_URL` com protocolo/domínio exatos (`https://radar.roqueconsultoriadigital.com.br` em produção) estejam configurados no `.env`. O coletor PNCP rejeita registros retornados para qualquer outro código IBGE ou município divergente.
+- **Órgãos pendentes de classificação:** licitações do PNCP com CNPJ ou razão social não reconhecidos com segurança nunca são presumidas como sendo da Prefeitura Municipal; ficam retidas em `/admin/contas-publicas` (`PENDING_CLASSIFICATION`) com link para o documento original no PNCP para conferência humana.
+- **Checkpoints e status reais:** execuções interrompidas por limite operacional (`maxRequestsPerRun` / `maxDurationMs`) ou falhas transitórias registram status `PARTIAL`, preservam `checkpointJson` na última página pendente e exibem os motivos de rejeição/pendência em `/admin/integracoes`.
+- **Proteção CSRF:** todas as requisições mutáveis em `/api/admin/*` e `/api/auth/*` exigem cabeçalho `Origin`/`Referer` válido correspondente às origens confiáveis configuradas no servidor e compatível com `x-csrf-token` quando enviado; requisições sem origem verificável são bloqueadas com HTTP `403`. O endpoint `/api/cron/collect` permanece independente, protegido por `Authorization: Bearer <CRON_SECRET>`.
