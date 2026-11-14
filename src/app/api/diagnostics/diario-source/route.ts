@@ -92,10 +92,14 @@ export async function GET(request: NextRequest) {
     // Only an explicit opt-in scans the edition PDF's text layer.
     // No database access; no raw text is ever returned.
     let pdfTextCheck: Awaited<ReturnType<typeof scanOfficialPdfForAct>> | null = null;
-    if (request.nextUrl.searchParams.get("pdf") === "2") {
+    const pdfMode = request.nextUrl.searchParams.get("pdf");
+    if (pdfMode === "2" || pdfMode === "3") {
       const selected = listing.items.find(item => item.textUrl === null) ?? listing.items[0];
       if (selected) {
-        pdfTextCheck = await scanOfficialPdfForAct(selected, { timeoutMs: 9000 });
+        pdfTextCheck = await scanOfficialPdfForAct(selected, {
+          timeoutMs: 9000,
+          inspectPageSpan: pdfMode === "3",
+        });
       }
     }
 
