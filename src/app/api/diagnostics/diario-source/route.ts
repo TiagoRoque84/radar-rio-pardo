@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { type OfficialActKind } from "@/lib/collectors/dioe-parser";
-import { fetchOfficialActListing } from "@/lib/collectors/dioe-reader";
+import {
+  extractListingActNumber,
+  type OfficialActKind,
+} from "@/lib/collectors/dioe-parser";
+import {
+  fetchOfficialActListing,
+  fetchVerifiedOfficialActText,
+} from "@/lib/collectors/dioe-reader";
+import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 
 /**
  * Preview-only operational diagnostic; never reads/writes the database.
@@ -29,8 +36,44 @@ export async function GET(request: NextRequest) {
       timeoutMs: 8000,
     });
 
+    const inspect = request.nextUrl.searchParams.get("inspect") === "1";
+    const samples = inspect ? listing.items.map(item => ({
+      title: detectAndMaskPersonalData(item.title).sanitizedText.slice(0, 210),
+      numberFromListing: extractListingActNumber(item.title),
+      publicationDate: item.publicationDate.toISOString().slice(0, 10),
+      editionNumber: item.editionNumber,
+      editionUrl: item.editionUrl,
+      textUrl: item.textUrl,
+    })) : undefined;
+
+    let detailCheck: {
+      checkedEdition: string;
+      status: "HEADING_VERIFIED" | "EDITION_MATCHED_ONLY" | "NOT_VERIFIED";
+      verifiedActNumber: string | null;
+      verifiedActDate: string | null;
+    } | undefined;
+    if (inspect) {
+      const sample = listing.items.find(item => item.textUrl !== null);
+      if (sample) {
+        let verified: Awaited<ReturnType<typeof fetchVerifiedOfficialActText>> = null;
+        try {
+          verified = await fetchVerifiedOfficialActText(sample, { timeoutMs: 5000 });
+        } catch { /* explicit failed validation below */ }
+        detailCheck = {
+          checkedEdition: sample.editionNumber,
+          status: verified
+            ? verified.verifiedActNumber && verified.verifiedActDate
+              ? "HEADING_VERIFIED" : "EDITION_MATCHED_ONLY"
+            : "NOT_VERIFIED",
+          verifiedActNumber: verified?.verifiedActNumber ?? null,
+          verifiedActDate: verified?.verifiedActDate?.toISOString().slice(0, 10) ?? null,
+        };
+      }
+    }
+
     return NextResponse.json({
       ...base,
+      ...(inspect ? { samples, detailCheck: detailCheck ?? null } : {}),
       status: listing.items.length ? "VALID_LIST" : "NO_VALID_ROWS",
       validItems: listing.items.length,
       bytesRead: listing.bytesRead,
