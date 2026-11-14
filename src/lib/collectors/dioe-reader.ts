@@ -3,6 +3,9 @@ import {
   parseOfficialActListing,
   type ListedOfficialAct,
   type OfficialActKind,
+  type OfficialActText,
+  parseOfficialActText,
+  safeOfficialUrl,
 } from "./dioe-parser";
 import { RADAR_USER_AGENT } from "./types";
 
@@ -128,6 +131,58 @@ export async function fetchOfficialActListing(
     }
 
     return await readOfficialListingPrefix(response, kind, options);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * One bounded, verified read of an official on-screen act. Missing or altered
+ * source text is never treated as a complete or verified extract.
+ */
+export async function fetchVerifiedOfficialActText(
+  item: ListedOfficialAct,
+  options: { timeoutMs?: number; fetchImpl?: typeof fetch } = {}
+): Promise<OfficialActText | null> {
+  if (!item.textUrl || !safeOfficialUrl(item.textUrl, "text")) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 5500);
+  const maxBytes = 240_000;
+  try {
+    const response = await (options.fetchImpl ?? fetch)(item.textUrl, {
+      method: "GET",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { "User-Agent": RADAR_USER_AGENT, Accept: "text/html" },
+    });
+    if (!response.ok || !response.body) return null;
+    if (response.url && !safeOfficialUrl(response.url, "text")) return null;
+    const mime = response.headers.get("content-type");
+    if (mime && !/text\/html|application\/xhtml\+xml/i.test(mime)) return null;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let html = "";
+    let bytes = 0;
+    let ended = false;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { ended = true; break; }
+        if (!value) continue;
+        bytes += value.byteLength;
+        if (bytes > maxBytes) return null;
+        html += decoder.decode(value, { stream: true });
+      }
+      html += decoder.decode();
+    } finally {
+      if (!ended) { try { await reader.cancel(); } catch { /* cancelled */ } }
+      reader.releaseLock();
+    }
+    if (/cf-turnstile|g-recaptcha|recaptcha/i.test(html)) return null;
+    return parseOfficialActText(html, item.editionNumber, {
+      kind: item.kind,
+      listingTitle: item.title,
+    });
   } finally {
     clearTimeout(timeout);
   }
