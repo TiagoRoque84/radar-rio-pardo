@@ -77,6 +77,23 @@ describe("Diagnóstico de PDF do Diário Oficial, somente leitura", () => {
     expect(report.contentLength).toBe(15000001);
   });
 
+  it("não segue redirecionamentos da fonte para outras redes", async () => {
+    let checked = false;
+    const result = await probeOfficialEditionPdf(item, {
+      fetchImpl: (async (_url: string | URL | Request, init?: RequestInit) => {
+        checked = true;
+        expect(init?.redirect).toBe("manual");
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://example.com/private" },
+        });
+      }) as typeof fetch,
+    });
+    expect(checked).toBe(true);
+    expect(result.status).toBe("PDF_HTTP_ERROR");
+    expect(result.httpStatus).toBe(302);
+  });
+
   it("distingue erros HTTP de documentos inválidos", async () => {
     const report = await probeOfficialEditionPdf(item, {
       fetchImpl: (async () => new Response("bloqueado", { status: 403 })) as typeof fetch,
