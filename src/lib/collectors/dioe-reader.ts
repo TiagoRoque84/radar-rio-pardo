@@ -57,6 +57,9 @@ export async function readOfficialListingPrefix(
         const fragment = decoder.decode(value.subarray(0, length), { stream: true });
         html += fragment;
         bytesRead += length;
+        if (/cf-turnstile|g-recaptcha|recaptcha/i.test(html.slice(0, 120_000))) {
+          throw new Error("OFFICIAL_SOURCE_ANTI_BOT");
+        }
 
         // Parse only when a new row ends; incomplete UTF-8 or an unfinished
         // <tr> is never treated as a verified item.
