@@ -72,6 +72,27 @@ describe("Coletor estruturado do Diário Oficial: parser defensivo", () => {
       .toBe(true);
   });
 
+  it("separa número e ano da listagem sem juntar 8140 a 2026", () => {
+    expect(extractListingActNumber("8140.2026 - Decreto - atualização UFM")).toBe("8140");
+    expect(extractListingActNumber("Decreto nº 8.140/2026 - atualização UFM")).toBe("8140");
+    expect(extractListingActNumber("DECRETO Nº 8.140, DE 12 DE NOVEMBRO DE 2026")).toBe("8140");
+    expect(extractListingActNumber("8139 - Decreto de encerramento")).toBe("8139");
+    expect(extractListingActNumber("PORTARIA Nº 20.323, DE 12 DE NOVEMBRO DE 2026")).toBe("20323");
+    expect(extractListingActNumber("Decreto Legislativo nº 10.2026")).toBeNull();
+    expect(extractListingActNumber("81402026 - título ambíguo")).toBeNull();
+  });
+
+  it("confere texto do Decreto 8140 contra título com ano da listagem", () => {
+    const official = "<h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1>" +
+      "<p>Publicado em 12 de novembro de 2026 | Edição nº 1929 | Ano IX</p>" +
+      "<h2>DECRETO Nº 8.140, DE 12 DE NOVEMBRO DE 2026.</h2>" +
+      "<blockquote>Dispõe sobre a atualização da UFM para o exercício de 2027.</blockquote>";
+    const result = parseOfficialActText(official, "1929", {
+      kind: "Decretos", listingTitle: "8140.2026 - Decreto - atualização UFM",
+    });
+    expect(result?.verifiedActNumber).toBe("8140");
+    expect(result?.verifiedActDate?.toISOString().slice(0, 10)).toBe("2026-11-12");
+  });
   it("não confunde a data de publicação com a data impressa no decreto", () => {
     const official = "<h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1>" +
       "<p>Publicado em 10 de novembro de 2026 | Edição nº 1927 | Ano IX</p>" +
