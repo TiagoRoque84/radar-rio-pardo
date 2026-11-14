@@ -142,9 +142,9 @@ export interface OfficialActText {
 }
 
 export function extractListingActNumber(title: string): string | null {
-  const match = title.match(/^(?:lei|decreto|portaria)\\s*(?:n[º°o.]*)?\\s*(\\d[\\d.,]*)/i)
-    ?? title.match(/^(\\d[\\d.,]*)(?=\\s*[-–—,]|\\s*$)/);
-  return match ? match[1].replace(/\\D/g, "") || null : null;
+  const match = title.match(/^(?:lei|decreto|portaria)\s*(?:n[º°o.]*)?\s*(\d[\d.,]*)/i)
+    ?? title.match(/^(\d[\d.,]*)(?=\s*[-–—,]|\s*$)/);
+  return match ? match[1].replace(/\D/g, "") || null : null;
 }
 
 const PORTUGUESE_MONTHS: Record<string, number> = {
@@ -160,7 +160,7 @@ function parseActHeader(text: string, kind: OfficialActKind): {
   const kindWord: Record<OfficialActKind, string> = {
     Decretos: "decreto", Leis: "lei", Portarias: "portaria",
   };
-  const match = cleaned.match(/\\b(decreto|lei|portaria)\\s*(?:n[º°o.]?\\s*)?(\\d[\\d.,]*)\\s*,?\\s*de\\s+(\\d{1,2})\\s+de\\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\s+de\\s+(\\d{4})\\b/i);
+  const match = cleaned.match(/\b(decreto|lei|portaria)\s*(?:n[º°o.]?\s*)?(\d[\d.,]*)\s*,?\s*de\s+(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i);
   if (!match || match[1] !== kindWord[kind]) {
     return { actDate: null, actNumber: null };
   }
@@ -170,7 +170,7 @@ function parseActHeader(text: string, kind: OfficialActKind): {
   if (year < 2018 || year > 2100 || date.getUTCDate() !== day || date.getUTCMonth() !== month - 1) {
     return { actDate: null, actNumber: null };
   }
-  return { actDate: date, actNumber: match[2].replace(/\\D/g, "") };
+  return { actDate: date, actNumber: match[2].replace(/\D/g, "") };
 }
 
 export function parseOfficialActText(
