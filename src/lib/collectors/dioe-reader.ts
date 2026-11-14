@@ -115,6 +115,7 @@ export async function fetchOfficialActListing(
   try {
     const response = await (options.fetchImpl ?? fetch)(listingUrl(kind), {
       method: "GET",
+      redirect: "manual", // Prevent source-controlled redirects.
       signal: controller.signal,
       cache: "no-store",
       headers: {
@@ -151,6 +152,7 @@ export async function fetchVerifiedOfficialActText(
   try {
     const response = await (options.fetchImpl ?? fetch)(item.textUrl, {
       method: "GET",
+      redirect: "manual", // Never follow redirects to arbitrary origins.
       cache: "no-store",
       signal: controller.signal,
       headers: { "User-Agent": RADAR_USER_AGENT, Accept: "text/html" },
