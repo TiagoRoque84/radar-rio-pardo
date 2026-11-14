@@ -33,6 +33,8 @@ export interface PdfTextScan {
   declaredBytes?: number;
   limitBytes?: number;
   httpStatus?: number;
+  /** Stable diagnostic stage; never exposes raw exception messages or server paths. */
+  failureStage?: "DOWNLOAD" | "WORKER_INIT" | "PARSER_IMPORT" | "PDF_INIT" | "GET_INFO" | "GET_TEXT" | "CLEANUP";
   /** Never send actual original PDF text to diagnostics. */
   textContentReturned: false;
   databaseAccess: false;
@@ -82,6 +84,7 @@ export async function scanOfficialPdfForAct(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 9000);
   let bytes = 0;
+  let failureStage: NonNullable<PdfTextScan["failureStage"]> = "DOWNLOAD";
   try {
     const response = await (options.fetchImpl ?? fetch)(item.editionUrl, {
       method: "GET",
@@ -144,11 +147,16 @@ export async function scanOfficialPdfForAct(
       return { ...base, status: "PDF_NOT_PDF" };
     }
 
-    // Only load the PDF engine after the response, type and size checks.
-    // The library's own worker remains inside Node, never the client.
+    // Next.js may need the worker registered before loading pdf-parse.
+    // This is the package maintainer's recommended server-side initialization.
+    failureStage = "WORKER_INIT";
+    await import("pdf-parse/worker");
+    failureStage = "PARSER_IMPORT";
     const { PDFParse } = await import("pdf-parse");
+    failureStage = "PDF_INIT";
     const parser = new PDFParse({ data: buffer });
     try {
+      failureStage = "GET_INFO";
       const info = await parser.getInfo();
       const pageCount = info.total;
       if (!Number.isInteger(pageCount) || pageCount < 1) {
@@ -162,6 +170,7 @@ export async function scanOfficialPdfForAct(
       let hasText = false;
       const matchingPages: number[] = [];
       for (let page = 1; page <= pagesScanned; page++) {
+        failureStage = "GET_TEXT";
         const result = await parser.getText({ partial: [page] });
         const text = result.text.slice(0, MAX_PAGE_TEXT_CHARS);
         if (text.trim().length > 20) hasText = true;
@@ -177,10 +186,16 @@ export async function scanOfficialPdfForAct(
         bytesDownloaded: bytes,
       };
     } finally {
-      await parser.destroy();
+      // Cleanup should not override the meaningful result or failure above.
+      try { await parser.destroy(); } catch { /* already released */ }
     }
   } catch {
-    return { ...base, status: "PDF_PARSE_ERROR", bytesDownloaded: bytes };
+    return {
+      ...base,
+      status: "PDF_PARSE_ERROR",
+      bytesDownloaded: bytes,
+      failureStage,
+    };
   } finally {
     clearTimeout(timeout);
   }
