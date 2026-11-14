@@ -8,6 +8,7 @@ import {
   fetchVerifiedOfficialActText,
 } from "@/lib/collectors/dioe-reader";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
+import { probeOfficialEditionPdf } from "@/lib/collectors/dioe-pdf-probe";
 
 /**
  * Preview-only operational diagnostic; never reads/writes the database.
@@ -71,9 +72,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Opt-in single-PDF signature check. Never exposes PDF text, bytes or
+    // connects to the database; intentionally only one document per call.
+    const checkPdf = request.nextUrl.searchParams.get("pdf") === "1";
+    const firstPdf = checkPdf
+      ? listing.items.find(item => item.textUrl === null) ?? listing.items[0]
+      : undefined;
+    let pdfCheck: Awaited<ReturnType<typeof probeOfficialEditionPdf>> | null = null;
+    if (firstPdf) {
+      try {
+        pdfCheck = await probeOfficialEditionPdf(firstPdf, { timeoutMs: 7000 });
+      } catch {
+        pdfCheck = { checkedEdition: firstPdf.editionNumber, status: "PDF_STREAM_UNAVAILABLE" };
+      }
+    }
+
     return NextResponse.json({
       ...base,
       ...(inspect ? { samples, detailCheck: detailCheck ?? null } : {}),
+      ...(checkPdf ? { pdfCheck } : {}),
       status: listing.items.length ? "VALID_LIST" : "NO_VALID_ROWS",
       validItems: listing.items.length,
       bytesRead: listing.bytesRead,
