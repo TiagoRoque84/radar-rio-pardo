@@ -136,10 +136,46 @@ export function parseOfficialActListing(
 export interface OfficialActText {
   excerpt: string;
   ementa: string | null;
+  /** Only the date printed in a validated act heading, never the publication date. */
+  verifiedActDate: Date | null;
+  verifiedActNumber: string | null;
+}
+
+export function extractListingActNumber(title: string): string | null {
+  const match = title.match(/^(?:lei|decreto|portaria)\\s*(?:n[º°o.]*)?\\s*(\\d[\\d.,]*)/i)
+    ?? title.match(/^(\\d[\\d.,]*)(?=\\s*[-–—,]|\\s*$)/);
+  return match ? match[1].replace(/\\D/g, "") || null : null;
+}
+
+const PORTUGUESE_MONTHS: Record<string, number> = {
+  janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
+  julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+};
+
+function parseActHeader(text: string, kind: OfficialActKind): {
+  actDate: Date | null;
+  actNumber: string | null;
+} {
+  const cleaned = plain(text).slice(0, 1800);
+  const kindWord: Record<OfficialActKind, string> = {
+    Decretos: "decreto", Leis: "lei", Portarias: "portaria",
+  };
+  const match = cleaned.match(/\\b(decreto|lei|portaria)\\s*(?:n[º°o.]?\\s*)?(\\d[\\d.,]*)\\s*,?\\s*de\\s+(\\d{1,2})\\s+de\\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\s+de\\s+(\\d{4})\\b/i);
+  if (!match || match[1] !== kindWord[kind]) {
+    return { actDate: null, actNumber: null };
+  }
+  const month = PORTUGUESE_MONTHS[match[4]];
+  const day = Number(match[3]), year = Number(match[5]);
+  const date = new Date(Date.UTC(year, month - 1, day, 12));
+  if (year < 2018 || year > 2100 || date.getUTCDate() !== day || date.getUTCMonth() !== month - 1) {
+    return { actDate: null, actNumber: null };
+  }
+  return { actDate: date, actNumber: match[2].replace(/\\D/g, "") };
 }
 
 export function parseOfficialActText(
-  html: string, expectedEdition: string
+  html: string, expectedEdition: string,
+  expected?: { kind: OfficialActKind; listingTitle: string }
 ): OfficialActText | null {
   if (!isRioPardoOfficialHtml(html)) return null;
   const text = htmlToOfficialText(html);
@@ -151,5 +187,17 @@ export function parseOfficialActText(
   const ementa = quote ? htmlToOfficialText(quote[1]).slice(0, 400) : "";
   // Somente trecho curto para revisão; não gera análise ou inferências.
   const excerpt = text.slice(0, 1700);
-  return { excerpt, ementa: ementa.length >= 12 ? ementa : null };
+  const identity = expected
+    ? parseActHeader(text, expected.kind)
+    : { actDate: null, actNumber: null };
+  const listingNumber = expected ? extractListingActNumber(expected.listingTitle) : null;
+  if (identity.actNumber && listingNumber && identity.actNumber !== listingNumber) {
+    return null; // Detail does not belong to the act listed.
+  }
+  return {
+    excerpt,
+    ementa: ementa.length >= 12 ? ementa : null,
+    verifiedActDate: identity.actDate,
+    verifiedActNumber: identity.actNumber,
+  };
 }
