@@ -84,6 +84,18 @@ genérico que aceite qualquer link da página inicial.
   devolvido ao usuário ou gravado em banco nesta etapa. Os limites do
   `pdf=2` (12 MB, 30 páginas, máximo 8 páginas examinadas) continuam
   vigentes. Não publicar notícia somente com base nos marcadores.
+- **Preparação conservadora do texto para revisão:** com `pdf=4`, a prévia
+  confirma os marcadores completos de início e fim, exige o marcador do
+  documento em linha separada em cada página e o cabeçalho correspondente
+  do ato na primeira página. Rejeita cabeçalhos de outros atos ou sequências
+  incompletas. O leitor prepara uma **candidatura em memória** para revisão,
+  mas o endpoint responde somente `segmentCheck` (status, páginas, quantidade
+  de caracteres, presença de anexo); **jamais devolve o texto original**,
+  não persiste nada e não o publica. `SEGMENT_PREPARED_FOR_REVIEW` não é
+  certificação de integridade jurídica ou editorial; antes de salvar um
+  rascunho é necessário sanitizar, apresentar a fonte e permitir conferência
+  humana, inclusive de tabelas e rodapés. Esta etapa não cobre páginas
+  mistas ou PDFs com ordenação textual sem linhas separadas.
 - **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
   a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
