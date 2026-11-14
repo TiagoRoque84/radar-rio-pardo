@@ -24,7 +24,7 @@ export interface PdfProbe {
 }
 
 const MAX_DECLARED_PDF_BYTES = 15_000_000;
-const MAX_SIGNATURE_BYTES = 4096;
+const SIGNATURE_BYTES = 8;
 const PDF_HEADER = /^%PDF-[12]\.\d/;
 
 export function isMatchingEditionPdf(item: ListedOfficialAct): boolean {
@@ -94,12 +94,12 @@ export async function probeOfficialEditionPdf(
     let stopped = false;
     let accumulated = new Uint8Array(0);
     try {
-      while (accumulated.byteLength < 8 && accumulated.byteLength < MAX_SIGNATURE_BYTES) {
+      while (accumulated.byteLength < SIGNATURE_BYTES) {
         const next = await reader.read();
         if (next.done) { stopped = true; break; }
         const chunk = next.value;
         if (!chunk) continue;
-        const take = Math.min(chunk.byteLength, MAX_SIGNATURE_BYTES - accumulated.byteLength);
+        const take = Math.min(chunk.byteLength, SIGNATURE_BYTES - accumulated.byteLength);
         const merged = new Uint8Array(accumulated.byteLength + take);
         merged.set(accumulated, 0);
         merged.set(chunk.subarray(0, take), accumulated.byteLength);
