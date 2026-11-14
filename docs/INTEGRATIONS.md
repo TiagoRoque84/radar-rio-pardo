@@ -44,6 +44,13 @@ genérico que aceite qualquer link da página inicial.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
   Licitações, contratos, concursos, demais seções e atos não indexados nessas
   três listas continuarão fora da coleta automática nesta etapa.
+- **Acesso externo:** o teste somente leitura em GitHub Actions retornou HTTP 403
+  no endpoint `/listaatos.php` em 14/11/2026. Não há tentativa de contornar
+  restrições do fornecedor. A conectividade específica precisa ser verificada
+  na Hostinger antes de autorizar o deploy/uso deste coletor.
+- **Teste diagnóstico opcional:** `npx tsx scripts/verify-dioe-live.ts` executa
+  uma única consulta GET sem usar banco de dados. Falha explicitamente se
+  a fonte bloquear a requisição.
 - **Comprovação operacional:** os testes automatizados são baseados em fixtures;
   antes da integração em produção, conferir uma coleta real na Hostinger e comparar
   alguns documentos com os registros oficiais.
