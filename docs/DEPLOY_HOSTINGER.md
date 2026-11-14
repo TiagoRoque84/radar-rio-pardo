@@ -63,7 +63,12 @@ AI_MONTHLY_BUDGET_BRL="50.00"
 
 1. Conecte o repositório `https://github.com/TiagoRoque84/radar-rio-pardo.git` no painel de Deploy Git / SSH da Hostinger. *(O arquivo `prisma/schema.prisma` versionado no repositório já aponta para `provider = "mysql"`.)*
 2. Selecione a versão **Node.js LTS** disponível no painel (recomendado Node 20 LTS ou 22 LTS).
-3. Execute os comandos de preparação para MySQL e build:
+3. A Hostinger executa o comando padrão `npm run build`, que agora realiza automaticamente:
+   - `prisma generate` (cliente MySQL);
+   - `tsx scripts/init-db-if-needed.ts` (verifica no MySQL se já existe um administrador inicial; se não existir, aplica `migration.sql` caso falte alguma tabela e executa `prisma/seed.ts` usando `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD`; se já existir, preserva integralmente senha, permissões e dados sem sobrescrever);
+   - `next build` (com paralelismo reduzido para CloudLinux).
+
+   Para execução manual via SSH (opcional):
    ```bash
    npm ci
    npm run db:use-mysql
@@ -71,7 +76,7 @@ AI_MONTHLY_BUDGET_BRL="50.00"
    npm run db:seed
    npm run build
    ```
-   *(Após o primeiro seed bem-sucedido, você pode remover `SEED_ADMIN_PASSWORD` do `.env` e gerenciar/recuperar senhas via `/admin/conta`, `/admin/recuperar-senha` ou `npm run auth:reset-password`.)*
+   *(Após o primeiro deploy bem-sucedido, futuras atualizações pelo GitHub nunca redefinem a senha do administrador existente. Recomenda-se ainda remover `SEED_ADMIN_PASSWORD` das variáveis caso deseje e gerenciar senhas via `/admin/conta`, `/admin/recuperar-senha` ou `npm run auth:reset-password`.)*
 4. Configure o comando de inicialização da aplicação:
    ```bash
    npm run start
