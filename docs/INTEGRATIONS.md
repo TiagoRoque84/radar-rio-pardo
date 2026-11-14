@@ -55,6 +55,17 @@ genérico que aceite qualquer link da página inicial.
   mostra até 3 atos com título sanitizado, edição, data de publicação e
   links oficiais; confere o cabeçalho de **um único texto** disponível,
   sem conexão com o banco. Excluir esta rota antes de integrar à `main`.
+- **Prova de acesso ao PDF (somente leitura):** a prévia aceita
+  `/api/diagnostics/diario-source?kind=Decretos&inspect=1&pdf=1`.
+  O diagnóstico verifica **um** PDF de edição, dando prioridade ao ato que
+  não possui link HTML individual. Confere município, número/data na URL,
+  HTTPS, domínio, resposta HTTP e cabeçalho `%PDF-`; baixa só os
+  primeiros bytes e cancela a transferência. A resposta inclui
+  `pdfCheck.status=PDF_HEADER_VERIFIED` quando a assinatura é encontrada.
+  **Isso não significa que o conteúdo do PDF foi extraído ou autenticado.**
+  Sem dependência dedicada para texto PDF, a análise de páginas, OCR,
+  valores, atos múltiplos e resumos do arquivo segue pendente. Não publicar
+  notícia a partir de uma verificação somente de cabeçalho.
 - **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
   a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
