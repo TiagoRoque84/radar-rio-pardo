@@ -9,6 +9,7 @@ import {
 } from "@/lib/collectors/dioe-reader";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import { probeOfficialEditionPdf } from "@/lib/collectors/dioe-pdf-probe";
+import { scanOfficialPdfForAct } from "@/lib/collectors/dioe-pdf-text";
 
 /**
  * Preview-only operational diagnostic; never reads/writes the database.
@@ -16,6 +17,7 @@ import { probeOfficialEditionPdf } from "@/lib/collectors/dioe-pdf-probe";
  * IMPORTANT: remove this temporary endpoint before merging into main.
  */
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const kind = request.nextUrl.searchParams.get("kind") ?? "Decretos";
@@ -87,10 +89,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Only an explicit opt-in scans the edition PDF's text layer.
+    // No database access; no raw text is ever returned.
+    let pdfTextCheck: Awaited<ReturnType<typeof scanOfficialPdfForAct>> | null = null;
+    if (request.nextUrl.searchParams.get("pdf") === "2") {
+      const selected = listing.items.find(item => item.textUrl === null) ?? listing.items[0];
+      if (selected) {
+        pdfTextCheck = await scanOfficialPdfForAct(selected, { timeoutMs: 9000 });
+      }
+    }
+
     return NextResponse.json({
       ...base,
       ...(inspect ? { samples, detailCheck: detailCheck ?? null } : {}),
       ...(checkPdf ? { pdfCheck } : {}),
+      ...(pdfTextCheck ? { pdfTextCheck } : {}),
       status: listing.items.length ? "VALID_LIST" : "NO_VALID_ROWS",
       validItems: listing.items.length,
       bytesRead: listing.bytesRead,
