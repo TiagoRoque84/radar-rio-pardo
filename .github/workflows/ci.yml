@@ -32,6 +32,8 @@ jobs:
         env:
           DATABASE_URL: file:./dev.db
           NODE_ENV: test
+      - name: Verificar leitura da listagem oficial (somente GET)
+        run: npx tsx scripts/verify-dioe-live.ts
       - name: Verificar TypeScript e build MySQL
         run: |
           npm run db:use-mysql
