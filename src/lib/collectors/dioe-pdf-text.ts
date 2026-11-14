@@ -3,7 +3,9 @@ import { extractListingActNumber } from "./dioe-parser";
 import { isMatchingEditionPdf } from "./dioe-pdf-probe";
 import { RADAR_USER_AGENT } from "./types";
 
-const MAX_PDF_BYTES = 4_000_000;
+// Maximum download for one explicitly requested preview diagnostic.
+// Keep a strict cap; PDF parsing also allocates memory beyond file size.
+const MAX_PDF_BYTES = 12_000_000;
 const MAX_PAGE_COUNT = 30;
 const MAX_SCAN_PAGES = 8;
 const MAX_PAGE_TEXT_CHARS = 40_000;
@@ -28,6 +30,8 @@ export interface PdfTextScan {
   pagesScanned?: number;
   matchingPages?: number[];
   bytesDownloaded?: number;
+  declaredBytes?: number;
+  limitBytes?: number;
   httpStatus?: number;
   /** Never send actual original PDF text to diagnostics. */
   textContentReturned: false;
@@ -97,7 +101,11 @@ export async function scanOfficialPdfForAct(
     }
     const declared = response.headers.get("content-length");
     if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_PDF_BYTES) {
-      return { ...base, status: "PDF_TOO_LARGE" };
+      return {
+        ...base, status: "PDF_TOO_LARGE",
+        declaredBytes: Number(declared), limitBytes: MAX_PDF_BYTES,
+        bytesDownloaded: 0,
+      };
     }
     const mime = response.headers.get("content-type");
     if (mime && !/^(?:application\/pdf|application\/octet-stream)(?:\s*;|$)/i.test(mime)) {
@@ -114,7 +122,12 @@ export async function scanOfficialPdfForAct(
         if (done) { finished = true; break; }
         if (!value) continue;
         bytes += value.byteLength;
-        if (bytes > MAX_PDF_BYTES) return { ...base, status: "PDF_TOO_LARGE" };
+        if (bytes > MAX_PDF_BYTES) {
+          return {
+            ...base, status: "PDF_TOO_LARGE",
+            bytesDownloaded: bytes, limitBytes: MAX_PDF_BYTES,
+          };
+        }
         chunks.push(value);
       }
     } finally {
