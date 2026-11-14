@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listingUrl, parseOfficialActListing } from "@/lib/collectors/dioe-parser";
+import { type OfficialActKind } from "@/lib/collectors/dioe-parser";
+import { fetchOfficialActListing } from "@/lib/collectors/dioe-reader";
 
 /**
- * Diagnóstico somente leitura da fonte externa, entregue apenas na branch de preview.
- * Não confiar no hostname de NextRequest para identificar o preview: o proxy
- * reverso da hospedagem pode expor o hostname interno ao Next.js.
- * REMOVER ESTE ENDPOINT ANTES DE FAZER MERGE NA BRANCH MAIN.
- * Nunca acessa Prisma, banco, credenciais, seeds ou endpoints administrativos.
- * Não aceita URL arbitrária e não devolve HTML/trechos originais.
+ * Preview-only operational diagnostic; never reads/writes the database.
+ * No arbitrary URLs and no raw HTML or personal data are returned.
+ * IMPORTANT: remove this temporary endpoint before merging into main.
  */
 export const dynamic = "force-dynamic";
 
@@ -17,58 +15,40 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Tipo de ato inválido." }, { status: 400 });
   }
 
-  const url = listingUrl(kind);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      cache: "no-store",
-      headers: {
-        "User-Agent": "RadarRioPardoBot/1.0 (+https://radar.roqueconsultoriadigital.com.br; transparencia-publica)",
-        Accept: "text/html",
-      },
-    });
-    if (!response.ok) {
-      return NextResponse.json({
-        source: "Imprensa Oficial Municipal",
-        kind,
-        status: "HTTP_BLOCK_OR_ERROR",
-        httpStatus: response.status,
-        collected: false,
-        databaseAccess: false,
-      }, { status: 200, headers: { "Cache-Control": "no-store" } });
-    }
+  const base = {
+    source: "Imprensa Oficial Municipal",
+    kind: kind as OfficialActKind,
+    collected: false,
+    databaseAccess: false,
+  };
 
-    const body = await response.text();
-    if (body.length > 1_000_000) {
-      return NextResponse.json({
-        source: "Imprensa Oficial Municipal", kind,
-        status: "HTML_TOO_LARGE", collected: false, databaseAccess: false,
-      }, { headers: { "Cache-Control": "no-store" } });
-    }
-    try {
-      const items = parseOfficialActListing(body, kind, 3);
-      return NextResponse.json({
-        source: "Imprensa Oficial Municipal", kind,
-        status: items.length ? "VALID_LIST" : "NO_VALID_ROWS",
-        validItems: items.length,
-        collected: false, databaseAccess: false,
-      }, { headers: { "Cache-Control": "no-store" } });
-    } catch {
-      return NextResponse.json({
-        source: "Imprensa Oficial Municipal", kind,
-        status: "UNRECOGNIZED_HTML", collected: false, databaseAccess: false,
-      }, { headers: { "Cache-Control": "no-store" } });
-    }
-  } catch (error) {
+  try {
+    const listing = await fetchOfficialActListing(kind, {
+      maxItems: 3,
+      maxBytes: 1_500_000,
+      timeoutMs: 8000,
+    });
+
     return NextResponse.json({
-      source: "Imprensa Oficial Municipal", kind,
-      status: error instanceof Error && error.name === "AbortError" ? "TIMEOUT" : "NETWORK_ERROR",
-      collected: false, databaseAccess: false,
+      ...base,
+      status: listing.items.length ? "VALID_LIST" : "NO_VALID_ROWS",
+      validItems: listing.items.length,
+      bytesRead: listing.bytesRead,
+      partialRead: listing.hitByteLimit,
+      stoppedAfterTarget: listing.stoppedAfterTarget,
     }, { headers: { "Cache-Control": "no-store" } });
-  } finally {
-    clearTimeout(timer);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "";
+    const http = detail.match(/^OFFICIAL_SOURCE_HTTP_(\d{3})$/);
+    const status =
+      http ? "HTTP_BLOCK_OR_ERROR" :
+      error instanceof Error && error.name === "AbortError" ? "TIMEOUT" :
+      /^(?:LISTING_BYTE_LIMIT|Listagem não identificada)/.test(detail) ? "UNRECOGNIZED_HTML" :
+      "NETWORK_ERROR";
+    return NextResponse.json({
+      ...base,
+      status,
+      ...(http ? { httpStatus: Number(http[1]) } : {}),
+    }, { headers: { "Cache-Control": "no-store" } });
   }
 }
