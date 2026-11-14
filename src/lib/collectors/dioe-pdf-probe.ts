@@ -58,7 +58,7 @@ export async function probeOfficialEditionPdf(
   try {
     const response = await (options.fetchImpl ?? fetch)(item.editionUrl, {
       method: "GET",
-      redirect: "follow",
+      redirect: "manual", // Never follow redirects to untrusted hosts.
       cache: "no-store",
       signal: controller.signal,
       headers: {
