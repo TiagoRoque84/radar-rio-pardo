@@ -37,7 +37,23 @@ jobs:
           npm run db:use-mysql
           npx prisma generate
           npm run typecheck
-          npm run build
+          # O Google Fonts às vezes devolve URLs sem extensão; o next/font
+          # pode falhar na CI com "Cannot read properties of null (reading '1')".
+          # Repetir SOMENTE essa falha transitória, sem esconder erros de código.
+          for attempt in 1 2 3; do
+            if npm run build > /tmp/radar-build.log 2>&1; then
+              cat /tmp/radar-build.log
+              exit 0
+            fi
+            cat /tmp/radar-build.log
+            if ! grep -q 'next/font' /tmp/radar-build.log ||
+               ! grep -q "Cannot read properties of null (reading '1')" /tmp/radar-build.log ||
+               [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "next/font externo apresentou resposta incompatível; nova tentativa $((attempt + 1))/3"
+            sleep 2
+          done
         env:
           DATABASE_URL: file:./dev.db
           NODE_ENV: test
