@@ -132,7 +132,7 @@ async function collectOne(
         financialType: "NONE",
         officialUrl: (item.textUrl || item.editionUrl).slice(0, 700),
         contentHash,
-        status: "IN_REVIEW",
+        status: "DRAFT_IMPORTED",
         aiGenerated: false,
         hasPersonalDataAlert:
           summary.hasPersonalData || Boolean(excerpt?.hasPersonalData) ||
