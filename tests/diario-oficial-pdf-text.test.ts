@@ -17,7 +17,10 @@ const item: ListedOfficialAct = {
 /** Generate a minimal PDF fixture entirely inside CI; no real documents. */
 function onePagePdf(line: string): Uint8Array {
   const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-  const stream = "BT /F1 16 Tf 50 740 Td (" + escape(line) + ") Tj ET";
+  const commands = line.split("\n").map((part, i) =>
+    (i === 0 ? "" : "0 -22 Td ") + "(" + escape(part) + ") Tj"
+  ).join(" ");
+  const stream = "BT /F1 16 Tf 50 740 Td " + commands + " ET";
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -114,6 +117,29 @@ describe("Camada de texto de PDF oficial - somente leitura", () => {
       verifiedPageMarkers: 1,
       scope: "PAGE_LEVEL_ONLY",
     });
+    expect(result.textContentReturned).toBe(false);
+    expect(result.databaseAccess).toBe(false);
+  });
+
+  it("prepara apenas metadados do texto segmentado sem expor trecho do ato", async () => {
+    const pdf = onePagePdf([
+      "DECRETO N. 8.140/2026 - PAGINA 1 DE 1",
+      "DECRETO N. 8.140, DE 12 DE NOVEMBRO DE 2026.",
+      "Art. 1 A UFM fica fixada em R$ 195,62.",
+    ].join("\n"));
+    const result = await scanOfficialPdfForAct(item, {
+      inspectPageSpan: true,
+      inspectTextSegment: true,
+      fetchImpl: (async () => new Response(pdf, {
+        headers: { "content-type": "application/pdf" },
+      })) as typeof fetch,
+    });
+    expect(result.status).toBe("ACT_MATCHED");
+    expect(result.pageSpanCheck?.status).toBe("PAGE_MARKERS_COMPLETE");
+    expect(result.segmentCheck?.status).toBe("SEGMENT_PREPARED_FOR_REVIEW");
+    expect(result.segmentCheck?.firstPage).toBe(1);
+    expect(result.segmentCheck?.isolatedCharacters).toBeGreaterThan(40);
+    expect(JSON.stringify(result)).not.toContain("R$ 195,62");
     expect(result.textContentReturned).toBe(false);
     expect(result.databaseAccess).toBe(false);
   });
