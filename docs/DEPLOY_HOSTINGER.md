@@ -31,26 +31,37 @@ NODE_ENV="production"
 NEXT_PUBLIC_APP_URL="https://radar.roqueconsultoriadigital.com.br"
 NEXT_PUBLIC_SITE_NAME="Radar Rio Pardo"
 NEXT_PUBLIC_MUNICIPALITY="São José do Rio Pardo - SP"
+MUNICIPALITY_IBGE_CODE="3549706"
 
 DATABASE_URL="mysql://USUARIO_MYSQL:SENHA_FORTE@localhost:3306/NOME_DO_BANCO"
 
 # Gere com: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+# Em produção, AUTH_SECRET exige >= 32 caracteres e CRON_SECRET >= 24 caracteres.
 AUTH_SECRET="COLE_AQUI_SUA_CHAVE_ALEATORIA_FORTE"
 CRON_SECRET="COLE_AQUI_SEU_TOKEN_SECRETO_PARA_CRON"
 
+# Obrigatório na primeira criação do ADMIN em produção (sem senha padrão fixa no código)
 SEED_ADMIN_EMAIL="seu-email-admin@roqueconsultoriadigital.com.br"
 SEED_ADMIN_PASSWORD="DEFINA_UMA_SENHA_FORTE_UNICA"
+
+# Opcionais: defina apenas se desejar criar contas iniciais EDITOR / COLLABORATOR
+SEED_EDITOR_EMAIL=""
+SEED_EDITOR_PASSWORD=""
+SEED_COLLABORATOR_EMAIL=""
+SEED_COLLABORATOR_PASSWORD=""
 
 AI_PROVIDER="disabled"
 AI_API_KEY=""
 AI_MONTHLY_BUDGET_BRL="50.00"
 ```
 
+> **Importante:** Não existem senhas padrão fixas no código-fonte. Em `NODE_ENV="production"`, a aplicação recusa iniciar sessões sem `AUTH_SECRET` forte e o `db:seed` recusa criar o usuário administrador inicial caso `SEED_ADMIN_PASSWORD` não atenda à política mínima (12 caracteres, maiúscula, minúscula, número e símbolo).
+
 ---
 
 ## 4. Deploy via Repositório GitHub e Build
 
-1. Conecte o repositório `https://github.com/TiagoRoque84/radar-rio-pardo.git` no painel de Deploy Git / SSH da Hostinger.
+1. Conecte o repositório `https://github.com/TiagoRoque84/radar-rio-pardo.git` no painel de Deploy Git / SSH da Hostinger. *(O arquivo `prisma/schema.prisma` versionado no repositório já aponta para `provider = "mysql"`.)*
 2. Selecione a versão **Node.js LTS** disponível no painel (recomendado Node 20 LTS ou 22 LTS).
 3. Execute os comandos de preparação para MySQL e build:
    ```bash
@@ -60,6 +71,7 @@ AI_MONTHLY_BUDGET_BRL="50.00"
    npm run db:seed
    npm run build
    ```
+   *(Após o primeiro seed bem-sucedido, você pode remover `SEED_ADMIN_PASSWORD` do `.env` e gerenciar/recuperar senhas via `/admin/conta`, `/admin/recuperar-senha` ou `npm run auth:reset-password`.)*
 4. Configure o comando de inicialização da aplicação:
    ```bash
    npm run start

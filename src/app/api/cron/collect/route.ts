@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { executeAdapterCollection } from "@/lib/collectors/runner";
+import { validateCronSecretHeader } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const configuredSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
+  const authCheck = validateCronSecretHeader(request.headers.get("authorization"));
 
-  if (!configuredSecret || !token || token !== configuredSecret) {
-    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: authCheck.reason || "Não autorizado." },
+      { status: 401 }
+    );
   }
 
   try {

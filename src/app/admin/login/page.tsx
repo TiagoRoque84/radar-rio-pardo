@@ -107,8 +107,14 @@ export default function AdminLoginPage() {
           </button>
         </form>
 
-        <div className="border-t border-radar-border pt-4 text-center text-xs text-radar-muted">
-          <Link href="/" className="text-radar-blue hover:underline">
+        <div className="border-t border-radar-border pt-4 flex flex-col items-center gap-2 text-center text-xs text-radar-muted">
+          <Link
+            href="/admin/recuperar-senha"
+            className="text-radar-blue hover:underline font-medium"
+          >
+            Esqueceu ou precisa redefinir a senha?
+          </Link>
+          <Link href="/" className="text-radar-muted hover:text-radar-blue hover:underline">
             ← Voltar para o portal público
           </Link>
         </div>

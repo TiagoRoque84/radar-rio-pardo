@@ -70,7 +70,7 @@ export default async function ContasPublicasPage() {
             title="Licitações registradas por modalidade"
             data={chartData}
             period="Registros sincronizados disponíveis"
-            source="PNCP (IBGE 3550803) e Portais de Transparência"
+            source="PNCP (IBGE 3549706) e Portais de Transparência"
             collectedAt={formatDateBR(new Date())}
             formula="Contagem simples de processos licitatórios por modalidade."
             limitations="Depende da disponibilidade de publicação na API do PNCP e dos arquivos oficiais importados."

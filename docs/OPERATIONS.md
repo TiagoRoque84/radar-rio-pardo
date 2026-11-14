@@ -45,3 +45,25 @@ npx prisma generate
 npm run build
 # Reinicie a aplicação Node.js pelo hPanel da Hostinger
 ```
+
+---
+
+## 5. Gestão, Troca e Recuperação de Senhas
+
+- **Alteração autenticada:** qualquer usuário autenticado pode alterar sua própria senha em `/admin/conta` (revoga automaticamente demais sessões abertas).
+- **Recuperação via token temporário:** em `/admin/recuperar-senha`, é possível solicitar e consumir um token válido por 30 minutos (armazenado como hash SHA-256 em `PasswordResetToken`).
+- **Contingência administrativa via SSH/CLI:** caso o servidor não possua envio transacional de e-mail ou haja bloqueio de conta após tentativas inválidas, execute na pasta da aplicação:
+
+```bash
+# Emitir token de 30 minutos para uso em /admin/recuperar-senha:
+npm run auth:reset-password -- --email=admin@radarriopardo.com.br --generate-token
+
+# Ou gerar nova senha aleatória forte diretamente (revoga sessões e desbloqueia conta):
+npm run auth:reset-password -- --email=admin@radarriopardo.com.br
+```
+
+---
+
+## 6. Conferência Territorial (São José do Rio Pardo)
+
+- Confirme sempre que `MUNICIPALITY_IBGE_CODE="3549706"` no `.env`. O coletor PNCP rejeita registros retornados para qualquer outro código IBGE ou município divergente.

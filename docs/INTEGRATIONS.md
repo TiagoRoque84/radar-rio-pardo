@@ -9,7 +9,7 @@ O módulo de coleta (`src/lib/collectors/`) é independente dos demais módulos 
 | Chave do Adaptador | Fonte | URL | Método / Status |
 | --- | --- | --- | --- |
 | `imprensa-oficial-sjrp` | Diário Oficial Eletrônico de São José do Rio Pardo | `https://www.imprensaoficialmunicipal.com.br/sjriopardo` | Requisição HTTP GET ética com detecção de CAPTCHA e indexação de links públicos para revisão humana. Não há API JSON oficial documentada conhecida até o momento. |
-| `pncp-api-sjrp` | Portal Nacional de Contratações Públicas (PNCP) | `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao` | **API REST pública oficial** filtrando pelo código IBGE `3550803` (São José do Rio Pardo). Validação com Zod. |
+| `pncp-api-sjrp` | Portal Nacional de Contratações Públicas (PNCP) | `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao` | **API REST pública oficial** filtrando pelo código IBGE `3549706` (São José do Rio Pardo) e parâmetro obrigatório `codigoModalidadeContratacao`, com paginação e validação rigorosa de município/órgão via Zod. |
 | `camara-sjrp-check` | Portal da Câmara Municipal | `https://camarasjriopardo.sp.gov.br/` | Monitor de disponibilidade HTTP. Coleta detalhada pendente de validação estrutural de dados abertos; utilizar cadastro/importação assistida no `/admin/camara`. |
 | `transparencia-prefeitura-check` | Portal da Transparência da Prefeitura | `https://saojosedoriopardo.sp.gov.br/portal-da-transparencia-home/` | Monitor de disponibilidade HTTP + importação assistida de planilhas/JSON oficiais. |
 | `camara-atende-net-check` | Portal da Câmara / Atende.net | `https://camarasaojosedoriopardo.atende.net/` | Monitor de disponibilidade HTTP. Sem contorno a barreiras/autenticação. |

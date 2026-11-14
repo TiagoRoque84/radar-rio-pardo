@@ -13,6 +13,7 @@ import {
   Share2,
   MessageSquareWarning,
   BadgeDollarSign,
+  KeyRound,
   LogOut,
   ExternalLink,
 } from "lucide-react";
@@ -35,6 +36,11 @@ const ADMIN_LINKS = [
     href: "/admin/publicidade",
     label: "Publicidade & Patrocínio",
     icon: BadgeDollarSign,
+  },
+  {
+    href: "/admin/conta",
+    label: "Minha Conta & Senha",
+    icon: KeyRound,
   },
 ];
 

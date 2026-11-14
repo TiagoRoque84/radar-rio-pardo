@@ -53,7 +53,10 @@ export async function executeAdapterCollection(
         result = await runImprensaOficialCollector(ctx);
         break;
       case "pncp-api-sjrp":
-        result = await runPncpCollector(ctx);
+        result = await runPncpCollector({
+          ...ctx,
+          configJson: adapter.configJson,
+        });
         break;
       default:
         result = await runAvailabilityCollector(ctx);

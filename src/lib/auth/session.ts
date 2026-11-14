@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { getRequiredAuthSecret } from "@/lib/env";
 
 export type UserRole = "ADMIN" | "EDITOR" | "COLLABORATOR";
 
@@ -13,22 +14,11 @@ export interface SessionUser {
   sessionId: string;
 }
 
-const SESSION_COOKIE_NAME = "radar_rp_session";
+export const SESSION_COOKIE_NAME = "radar_rp_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 horas
 
 function getAuthSecret(): Uint8Array {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 32) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(
-        "AUTH_SECRET não configurado com pelo menos 32 caracteres em produção."
-      );
-    }
-    return new TextEncoder().encode(
-      "radar-rio-pardo-dev-fallback-secret-do-not-use-in-prod"
-    );
-  }
-  return new TextEncoder().encode(secret);
+  return getRequiredAuthSecret();
 }
 
 export function hashSessionToken(token: string): string {

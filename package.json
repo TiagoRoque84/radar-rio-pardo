@@ -16,7 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:use-mysql": "node scripts/switch-db-provider.mjs mysql",
     "db:use-sqlite": "node scripts/switch-db-provider.mjs sqlite",
-    "collect:cron": "tsx scripts/run-collectors.ts"
+    "collect:cron": "tsx scripts/run-collectors.ts",
+    "auth:reset-password": "tsx scripts/reset-user-password.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

@@ -1,54 +1,125 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import {
+  generateStrongRandomPassword,
+  hashPassword,
+  validatePasswordStrength,
+} from "../src/lib/auth/password";
+import { SJRP_IBGE_CODE } from "../src/lib/municipality";
 
 const prisma = new PrismaClient();
+
+async function seedManagedUser(params: {
+  name: string;
+  email: string;
+  role: "ADMIN" | "EDITOR" | "COLLABORATOR";
+  envPassword?: string;
+  envVarName: string;
+  allowDevAutoGenerate?: boolean;
+}) {
+  const existing = await prisma.user.findUnique({
+    where: { email: params.email },
+    select: { id: true, email: true },
+  });
+
+  const provided = params.envPassword?.trim();
+
+  if (provided) {
+    const check = validatePasswordStrength(provided);
+    if (!check.valid) {
+      throw new Error(
+        `[SEED] Variável ${params.envVarName} não atende aos requisitos de segurança: ${check.errors.join(" ")}`
+      );
+    }
+
+    const passwordHash = await hashPassword(provided);
+    await prisma.user.upsert({
+      where: { email: params.email },
+      update: { name: params.name, role: params.role, passwordHash, active: true },
+      create: {
+        name: params.name,
+        email: params.email,
+        passwordHash,
+        role: params.role,
+        active: true,
+      },
+    });
+    console.log(`[SEED] Usuário ${params.role} (${params.email}) configurado via ${params.envVarName}.`);
+    return;
+  }
+
+  if (existing) {
+    console.log(
+      `[SEED] Usuário ${params.role} (${params.email}) já existe — senha atual mantida.`
+    );
+    return;
+  }
+
+  if (params.allowDevAutoGenerate) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        `[SEED] Em produção, defina ${params.envVarName} com uma senha forte (>=12 caracteres, maiúscula, minúscula, número e símbolo) para criar o usuário ${params.role} (${params.email}).`
+      );
+    }
+
+    const randomPassword = generateStrongRandomPassword();
+    const passwordHash = await hashPassword(randomPassword);
+    await prisma.user.create({
+      data: {
+        name: params.name,
+        email: params.email,
+        passwordHash,
+        role: params.role,
+        active: true,
+      },
+    });
+    console.log(
+      `[SEED DEV] Usuário ${params.role} criado (${params.email}). Senha gerada aleatoriamente apenas para este ambiente local: ${randomPassword}`
+    );
+    console.log(
+      "[SEED DEV] Altere esta senha após o login em /admin/conta ou via `npm run auth:reset-password`."
+    );
+    return;
+  }
+
+  console.log(
+    `[SEED] ${params.envVarName} não definida — usuário ${params.role} (${params.email}) não criado automaticamente.`
+  );
+}
 
 async function main() {
   console.log("Iniciando seed institucional do Radar Rio Pardo...");
 
   const adminEmail =
-    process.env.SEED_ADMIN_EMAIL || "admin@radarriopardo.com.br";
-  const adminPassword =
-    process.env.SEED_ADMIN_PASSWORD || "RadarAdmin@2026!";
+    process.env.SEED_ADMIN_EMAIL?.trim() || "admin@radarriopardo.com.br";
+  const editorEmail =
+    process.env.SEED_EDITOR_EMAIL?.trim() || "editor@radarriopardo.com.br";
+  const collaboratorEmail =
+    process.env.SEED_COLLABORATOR_EMAIL?.trim() ||
+    "colaborador@radarriopardo.com.br";
 
-  const adminHash = await bcrypt.hash(adminPassword, 12);
-  const editorHash = await bcrypt.hash("EditorRadar@2026!", 12);
-  const collabHash = await bcrypt.hash("ColaboradorRadar@2026!", 12);
-
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      name: "Administrador Radar Rio Pardo",
-      email: adminEmail,
-      passwordHash: adminHash,
-      role: "ADMIN",
-      active: true,
-    },
+  await seedManagedUser({
+    name: "Administrador Radar Rio Pardo",
+    email: adminEmail,
+    role: "ADMIN",
+    envPassword: process.env.SEED_ADMIN_PASSWORD,
+    envVarName: "SEED_ADMIN_PASSWORD",
+    allowDevAutoGenerate: true,
   });
 
-  await prisma.user.upsert({
-    where: { email: "editor@radarriopardo.com.br" },
-    update: {},
-    create: {
-      name: "Editoria Responsável",
-      email: "editor@radarriopardo.com.br",
-      passwordHash: editorHash,
-      role: "EDITOR",
-      active: true,
-    },
+  await seedManagedUser({
+    name: "Editoria Responsável",
+    email: editorEmail,
+    role: "EDITOR",
+    envPassword: process.env.SEED_EDITOR_PASSWORD,
+    envVarName: "SEED_EDITOR_PASSWORD",
   });
 
-  await prisma.user.upsert({
-    where: { email: "colaborador@radarriopardo.com.br" },
-    update: {},
-    create: {
-      name: "Colaborador de Redação",
-      email: "colaborador@radarriopardo.com.br",
-      passwordHash: collabHash,
-      role: "COLLABORATOR",
-      active: true,
-    },
+  await seedManagedUser({
+    name: "Colaborador de Redação",
+    email: collaboratorEmail,
+    role: "COLLABORATOR",
+    envPassword: process.env.SEED_COLLABORATOR_PASSWORD,
+    envVarName: "SEED_COLLABORATOR_PASSWORD",
   });
 
   // Categorias iniciais de notícias (Seção 4.2)
@@ -239,14 +310,14 @@ async function main() {
         url: "https://pncp.gov.br/api/consulta/swagger-ui/index.html",
         sourceType: "API_PUBLICA",
         termsNotes:
-          "API pública oficial do Governo Federal (Lei 14.133/2021). Consulta por código IBGE 3550803 (São José do Rio Pardo).",
+          `API pública oficial do Governo Federal (Lei 14.133/2021). Consulta por código IBGE ${SJRP_IBGE_CODE} (São José do Rio Pardo).`,
         validationMethod:
           "Consulta REST JSON paginada à API de consulta do PNCP com validação de schema Zod.",
         status: "CONFIGURED",
       },
       adapter: {
         adapterKey: "pncp-api-sjrp",
-        name: "Coletor PNCP — Licitações e Contratos (IBGE 3550803)",
+        name: `Coletor PNCP — Licitações e Contratos (IBGE ${SJRP_IBGE_CODE})`,
         frequencyCron: "0 */6 * * *",
         status: "IDLE",
       },
@@ -321,6 +392,8 @@ async function main() {
       update: {
         name: item.source.name,
         url: item.source.url,
+        termsNotes: item.source.termsNotes,
+        validationMethod: item.source.validationMethod,
       },
       create: item.source,
     });

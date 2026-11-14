@@ -9,6 +9,12 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
+  if (!canManageAdminSettings(user.role)) {
+    return NextResponse.json(
+      { error: "Apenas Administradores podem visualizar dados comerciais." },
+      { status: 403 }
+    );
+  }
 
   const sponsors = await prisma.sponsorAdvertiser.findMany({
     orderBy: { createdAt: "desc" },

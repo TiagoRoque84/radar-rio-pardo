@@ -2,19 +2,21 @@
 
 ## 1. Estratégia de Compatibilidade (MySQL Hostinger + Desenvolvimento Local)
 
-Para garantir execução imediata em desenvolvimento local mesmo quando não há um servidor MySQL local instalado na estação de trabalho, o projeto mantém:
+Para garantir deploy direto na Hostinger e execução opcional em desenvolvimento local quando não há um servidor MySQL instalado na estação de trabalho, o projeto mantém:
 
-- `prisma/schema.mysql.prisma`: schema completo otimizado para **MySQL 8 / MariaDB da Hostinger**, utilizando tipos exatos `@db.Decimal(15, 2)` para todos os valores financeiros, `@db.Text` e `@db.LongText` para textos extensos e `VARCHAR` indexados.
+- `prisma/schema.prisma` (versionado no Git com **`provider = "mysql"`** para deploys automatizados pelo GitHub na Hostinger).
+- `prisma/schema.mysql.prisma`: schema canônico completo otimizado para **MySQL 8 / MariaDB da Hostinger**, utilizando tipos exatos `@db.Decimal(15, 2)` para todos os valores financeiros, `@db.Text` e `@db.LongText` para textos extensos e `VARCHAR` indexados.
+- `prisma/schema.sqlite.prisma`: schema auxiliar exclusivamente para desenvolvimento local com SQLite.
 - `prisma/migrations/0001_initial_mysql/migration.sql`: script DDL SQL completo com `utf8mb4_unicode_ci`, chaves estrangeiras e índices pronto para importação direta no phpMyAdmin ou CLI MySQL da Hostinger.
 - Scripts de alternância automática:
-  - Antes de implantar na Hostinger: `npm run db:use-mysql`
+  - Antes de implantar ou commitar para a Hostinger: `npm run db:use-mysql`
   - Para desenvolver localmente com SQLite: `npm run db:use-sqlite`
 
 ---
 
 ## 2. Grupos de Entidades
 
-1. **Sistema e Segurança:** `User`, `Session`, `AuditLog`, `SystemSetting`.
+1. **Sistema e Segurança:** `User`, `Session`, `PasswordResetToken`, `AuditLog`, `SystemSetting`.
 2. **Fontes e Automações:** `PublicAgency`, `OfficialSource`, `IntegrationAdapter`, `CollectionRun`, `ImportedDocument`.
 3. **Diário Oficial:** `GazetteEdition`, `GazetteActCategory`, `GazetteAct`.
 4. **Notícias e Correções:** `NewsCategory`, `NewsArticle`, `DocumentReference`, `EditorialRevision`, `CorrectionRequest`.

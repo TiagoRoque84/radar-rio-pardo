@@ -31,7 +31,7 @@ Desenvolvido tecnicamente pela **Roque Consultoria Digital**, com identidade edi
 
 - Node.js 20 LTS ou superior (testado em Node v24.13.0)
 - npm 10+
-- Banco local SQLite (configurado por padrão para início rápido) ou MySQL 8 / MariaDB (produção Hostinger)
+- MySQL 8 / MariaDB (produção Hostinger, padrão de `prisma/schema.prisma` no GitHub) ou SQLite (alternável localmente via `npm run db:use-sqlite`)
 
 ---
 
@@ -42,18 +42,20 @@ Desenvolvido tecnicamente pela **Roque Consultoria Digital**, com identidade edi
    npm install
    ```
 
-2. Copie o arquivo de variáveis de ambiente:
+2. Copie o arquivo de variáveis de ambiente e preencha os segredos obrigatórios (`AUTH_SECRET`, `CRON_SECRET`, `DATABASE_URL` e `MUNICIPALITY_IBGE_CODE="3549706"`):
    ```bash
    cp .env.example .env
    ```
    *(No Windows PowerShell: `Copy-Item .env.example .env`)*
 
-3. Gere o Prisma Client, aplique o schema no banco local e execute o seed institucional:
+3. Caso utilize **SQLite local** (sem servidor MySQL instalado), ajuste `DATABASE_URL="file:./dev.db"` no `.env` e execute:
    ```bash
+   npm run db:use-sqlite
    npx prisma generate
    npx prisma db push
    npm run db:seed
    ```
+   > **Segurança de credenciais:** Não existem senhas padrão fixas no código. Defina `SEED_ADMIN_PASSWORD` com senha forte (mínimo 12 caracteres, maiúscula, minúscula, número e símbolo) antes de rodar o seed em produção. Em ambiente local de desenvolvimento (`NODE_ENV !== "production"`), se `SEED_ADMIN_PASSWORD` estiver vazio ao criar o primeiro administrador, `db:seed` gerará uma senha aleatória única exibida uma só vez no terminal. Para alterar ou recuperar senhas, use `/admin/conta`, `/admin/recuperar-senha` ou `npm run auth:reset-password -- --email=<email>`.
 
 4. Inicie o servidor de desenvolvimento:
    ```bash
@@ -61,7 +63,7 @@ Desenvolvido tecnicamente pela **Roque Consultoria Digital**, com identidade edi
    ```
    Acesse o portal em [http://localhost:3000](http://localhost:3000) e o painel administrativo em [http://localhost:3000/admin](http://localhost:3000/admin).
 
-   > **Credenciais iniciais de desenvolvimento:** definidas em `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD` no `.env.example` (altere imediatamente antes de publicar em produção).
+   > **Importante antes de commits:** se alternou localmente para SQLite, execute `npm run db:use-mysql` para garantir que `prisma/schema.prisma` permaneça em MySQL no repositório.
 
 ---
 
@@ -74,10 +76,11 @@ Desenvolvido tecnicamente pela **Roque Consultoria Digital**, com identidade edi
 | `npm run start` | Inicia a aplicação compilada |
 | `npm test` | Executa a suíte de testes automatizados (Vitest) |
 | `npm run typecheck` | Valida a tipagem estrita TypeScript |
-| `npm run db:seed` | Popula categorias, órgãos públicos, fontes oficiais e usuários iniciais |
-| `npm run db:use-mysql` | Alterna `prisma/schema.prisma` para o provedor MySQL (Hostinger) |
-| `npm run db:use-sqlite` | Alterna `prisma/schema.prisma` para o provedor SQLite (local) |
+| `npm run db:seed` | Popula categorias, órgãos públicos de São José do Rio Pardo (IBGE `3549706`), fontes oficiais e usuário admin inicial |
+| `npm run db:use-mysql` | Garante `prisma/schema.prisma` no provedor MySQL (Hostinger — padrão do Git) |
+| `npm run db:use-sqlite` | Alterna `prisma/schema.prisma` para SQLite (apenas desenvolvimento local) |
 | `npm run collect:cron` | Executa os adaptadores de coleta (ideal para Cron Jobs CLI) |
+| `npm run auth:reset-password` | Emite token temporário ou redefine a senha de um usuário administrativo via CLI |
 
 ---
 

@@ -13,9 +13,9 @@ if (!["mysql", "sqlite"].includes(target)) {
 }
 
 if (target === "mysql") {
-  const current = fs.readFileSync(schemaPath, "utf8");
-  if (current.includes('provider = "sqlite"')) {
-    fs.writeFileSync(sqliteBackupPath, current, "utf8");
+  if (!fs.existsSync(mysqlSchemaPath)) {
+    console.error("[Radar Rio Pardo] prisma/schema.mysql.prisma não encontrado.");
+    process.exit(1);
   }
   const mysqlContent = fs.readFileSync(mysqlSchemaPath, "utf8");
   fs.writeFileSync(schemaPath, mysqlContent, "utf8");

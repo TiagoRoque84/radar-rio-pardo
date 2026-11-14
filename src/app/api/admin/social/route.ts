@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth/session";
+import { canPublishContent, getCurrentUser } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/auth/audit";
 
 const socialDraftSchema = z.object({
@@ -55,6 +55,16 @@ export async function POST(request: NextRequest) {
     }
 
     const d = parsed.data;
+    if (d.status !== "DRAFT" && !canPublishContent(user.role)) {
+      return NextResponse.json(
+        {
+          error:
+            "Apenas Editores ou Administradores podem agendar ou registrar publicações sociais.",
+        },
+        { status: 403 }
+      );
+    }
+
     const draft = await prisma.socialPostDraft.create({
       data: {
         articleId: d.articleId,

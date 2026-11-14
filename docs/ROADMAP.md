@@ -14,7 +14,7 @@
 
 ## FASE 2 — Automação e Conteúdo (BASE IMPLEMENTADA / EXPANSÃO CONTÍNUA)
 
-- [x] Coletor ético inicial da Imprensa Oficial Municipal e coletor real da API do PNCP (IBGE 3550803).
+- [x] Coletor ético inicial da Imprensa Oficial Municipal e coletor real da API do PNCP (IBGE 3549706).
 - [x] Fluxo público e administrativo de solicitações de correção e LGPD (`/correcao` e `/admin/correcoes`).
 - [x] Preparação de postagens e prévia visual para Facebook (`/admin/redes-sociais`).
 - [x] Exportador de dossiê Markdown e prompt seguro para NotebookLM (`/admin/podcasts`).

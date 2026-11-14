@@ -493,7 +493,7 @@ export default async function HomePage() {
           ) : (
             <EmptyStateCard
               title="Aguardando primeira sincronização de licitações e contratos"
-              description="As contratações oficiais serão listadas aqui após sincronização com o PNCP (IBGE 3550803) ou importação validada dos portais municipais, diferenciando sempre valor estimado, contratado, empenhado e pago."
+              description="As contratações oficiais serão listadas aqui após sincronização com o PNCP (IBGE 3549706) ou importação validada dos portais municipais, diferenciando sempre valor estimado, contratado, empenhado e pago."
               sourceLabel="PNCP"
               sourceUrl="https://pncp.gov.br/"
             />
