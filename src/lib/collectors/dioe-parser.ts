@@ -142,9 +142,18 @@ export interface OfficialActText {
 }
 
 export function extractListingActNumber(title: string): string | null {
-  const match = title.match(/^(?:lei|decreto|portaria)\s*(?:n[º°o.]*)?\s*(\d[\d.,]*)/i)
-    ?? title.match(/^(\d[\d.,]*)(?=\s*[-–—,]|\s*$)/);
-  return match ? match[1].replace(/\D/g, "") || null : null;
+  const trimmed = title.trim();
+  // Examples seen in the official listing:
+  // "8140.2026", "8139 - Decreto", "Decreto nº 8.140/2026".
+  // A terminal year must not be concatenated with the act number.
+  const matched = trimmed.match(
+    /^(?:lei|decreto|portaria)\s*(?:n[º°o.]*)?\s*(\d+(?:[./]\d+)*)/i
+  ) ?? trimmed.match(/^(\d+(?:[./]\d+)*)(?=\s*[-–—,]|\s*$)/);
+  if (!matched) return null;
+  const withoutYear = matched[1].replace(/[./](?:19|20)\d{2}$/, "");
+  const number = withoutYear.replace(/[./]/g, "");
+  if (!/^\d{1,6}$/.test(number)) return null;
+  return number.replace(/^0+(?=\d)/, "");
 }
 
 const PORTUGUESE_MONTHS: Record<string, number> = {
