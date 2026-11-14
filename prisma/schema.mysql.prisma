@@ -1,0 +1,585 @@
+// Schema Prisma para Produção MySQL (Hostinger Cloud Startup)
+// Contém tipos nativos específicos do MySQL (@db.Decimal, @db.Text, @db.LongText).
+// Utilize `npm run db:use-mysql` para copiar este schema para `prisma/schema.prisma` antes de implantar na Hostinger.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String    @db.VarChar(180)
+  email               String    @unique @db.VarChar(190)
+  passwordHash        String    @db.VarChar(255)
+  role                String    @default("COLLABORATOR") @db.VarChar(40)
+  active              Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  authoredArticles   NewsArticle[]       @relation("ArticleAuthor")
+  reviewedArticles   NewsArticle[]       @relation("ArticleReviewer")
+  reviewedActs       GazetteAct[]        @relation("ActReviewer")
+  editorialRevisions EditorialRevision[]
+
+  @@index([role])
+  @@index([active])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique @db.VarChar(128)
+  ipAddress String?  @db.VarChar(64)
+  userAgent String?  @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String   @db.VarChar(120)
+  entityType  String   @db.VarChar(80)
+  entityId    String?  @db.VarChar(80)
+  detailsJson String?  @db.Text
+  ipAddress   String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique @db.VarChar(120)
+  valueJson String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model PublicAgency {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(220)
+  acronym     String?  @db.VarChar(40)
+  sphere      String   @default("MUNICIPAL") @db.VarChar(40)
+  city        String   @default("São José do Rio Pardo") @db.VarChar(120)
+  state       String   @default("SP") @db.VarChar(10)
+  officialUrl String?  @db.VarChar(500)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sources          OfficialSource[]
+  gazetteEditions  GazetteEdition[]
+  gazetteActs      GazetteAct[]
+  biddingProcesses BiddingProcess[]
+  publicContracts  PublicContract[]
+
+  @@index([city, state])
+}
+
+model OfficialSource {
+  id               String   @id @default(cuid())
+  agencyId         String
+  name             String   @db.VarChar(220)
+  slug             String   @unique @db.VarChar(120)
+  url              String   @db.VarChar(500)
+  sourceType       String   @db.VarChar(60)
+  termsNotes       String?  @db.Text
+  validationMethod String?  @db.Text
+  status           String   @default("CONFIGURED") @db.VarChar(40)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  agency            PublicAgency         @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  adapters          IntegrationAdapter[]
+  importedDocuments ImportedDocument[]
+
+  @@index([sourceType])
+  @@index([active])
+}
+
+model IntegrationAdapter {
+  id            String    @id @default(cuid())
+  sourceId      String
+  adapterKey    String    @unique @db.VarChar(120)
+  name          String    @db.VarChar(180)
+  frequencyCron String    @default("0 */6 * * *") @db.VarChar(60)
+  status        String    @default("IDLE") @db.VarChar(40)
+  lastRunAt     DateTime?
+  lastSuccessAt DateTime?
+  recordsCount  Int       @default(0)
+  lastError     String?   @db.Text
+  configJson    String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  source OfficialSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  runs   CollectionRun[]
+}
+
+model CollectionRun {
+  id              String    @id @default(cuid())
+  adapterId       String
+  status          String    @default("RUNNING") @db.VarChar(40)
+  triggerType     String    @default("MANUAL") @db.VarChar(40)
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  itemsFound      Int       @default(0)
+  itemsProcessed  Int       @default(0)
+  itemsDuplicated Int       @default(0)
+  errorCount      Int       @default(0)
+  logText         String?   @db.LongText
+  checkpointJson  String?   @db.Text
+
+  adapter   IntegrationAdapter @relation(fields: [adapterId], references: [id], onDelete: Cascade)
+  documents ImportedDocument[]
+
+  @@index([adapterId, startedAt])
+}
+
+model ImportedDocument {
+  id               String    @id @default(cuid())
+  sourceId         String
+  runId            String?
+  externalId       String?   @db.VarChar(180)
+  title            String    @db.VarChar(350)
+  originalUrl      String    @db.VarChar(700)
+  contentHash      String    @unique @db.VarChar(128)
+  mimeType         String    @default("text/html") @db.VarChar(100)
+  rawText          String?   @db.LongText
+  extractionStatus String    @default("PENDING") @db.VarChar(40)
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  source OfficialSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  run    CollectionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId, createdAt])
+}
+
+model GazetteEdition {
+  id              String   @id @default(cuid())
+  agencyId        String?
+  editionNumber   String   @db.VarChar(60)
+  publicationDate DateTime
+  year            Int
+  month           Int
+  officialUrl     String   @db.VarChar(700)
+  fileHash        String?  @unique @db.VarChar(128)
+  totalActs       Int      @default(0)
+  status          String   @default("PENDING_REVIEW") @db.VarChar(40)
+  summaryText     String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agency PublicAgency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  acts   GazetteAct[]
+
+  @@unique([editionNumber, year])
+  @@index([publicationDate])
+  @@index([year, month])
+  @@index([status])
+}
+
+model GazetteActCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique @db.VarChar(120)
+  slug        String  @unique @db.VarChar(120)
+  description String? @db.Text
+
+  acts GazetteAct[]
+}
+
+model GazetteAct {
+  id                   String    @id @default(cuid())
+  editionId            String
+  categoryId           String
+  agencyId             String?
+  actNumber            String?   @db.VarChar(80)
+  actDate              DateTime?
+  pageNumber           Int?
+  titleSimple          String    @db.VarChar(350)
+  objectiveSummary     String    @db.Text
+  rawExcerpt           String?   @db.LongText
+  financialValue       Decimal?  @db.Decimal(15, 2)
+  financialType        String?   @db.VarChar(40)
+  deadlinesText        String?   @db.Text
+  practicalImpact      String?   @db.Text
+  officialUrl          String    @db.VarChar(700)
+  contentHash          String    @unique @db.VarChar(128)
+  status               String    @default("IN_REVIEW") @db.VarChar(40)
+  hasPersonalDataAlert Boolean   @default(false)
+  aiGenerated          Boolean   @default(false)
+  aiModel              String?   @db.VarChar(100)
+  reviewedById         String?
+  reviewedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  edition     GazetteEdition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  category    GazetteActCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  agency      PublicAgency?       @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  reviewedBy  User?               @relation("ActReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  references  DocumentReference[]
+  corrections CorrectionRequest[]
+
+  @@index([editionId])
+  @@index([categoryId])
+  @@index([status])
+}
+
+model NewsCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique @db.VarChar(120)
+  slug        String  @unique @db.VarChar(120)
+  description String? @db.Text
+  active      Boolean @default(true)
+
+  articles NewsArticle[]
+}
+
+model NewsArticle {
+  id                   String    @id @default(cuid())
+  title                String    @db.VarChar(300)
+  slug                 String    @unique @db.VarChar(190)
+  subtitle             String?   @db.VarChar(400)
+  summary              String    @db.Text
+  content              String    @db.LongText
+  categoryId           String
+  tagsJson             String    @default("[]") @db.Text
+  coverImageUrl        String?   @db.VarChar(700)
+  status               String    @default("DRAFT") @db.VarChar(40)
+  featured             Boolean   @default(false)
+  isPublicUtilityAlert Boolean   @default(false)
+  aiUsed               Boolean   @default(false)
+  aiDisclosure         String?   @db.Text
+  correctionNotice     String?   @db.Text
+  authorId             String
+  reviewerId           String?
+  publishedAt          DateTime?
+  scheduledFor         DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  category     NewsCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  author       User                @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer     User?               @relation("ArticleReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  references   DocumentReference[]
+  corrections  CorrectionRequest[]
+  socialDrafts SocialPostDraft[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+  @@index([featured])
+}
+
+model DocumentReference {
+  id            String    @id @default(cuid())
+  articleId     String?
+  actId         String?
+  sourceName    String    @db.VarChar(250)
+  officialUrl   String    @db.VarChar(700)
+  documentDate  DateTime?
+  referenceCode String?   @db.VarChar(120)
+  pageOrSection String?   @db.VarChar(120)
+  consultedAt   DateTime  @default(now())
+
+  article NewsArticle? @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  act     GazetteAct?  @relation(fields: [actId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+  @@index([actId])
+}
+
+model EditorialRevision {
+  id            String   @id @default(cuid())
+  entityType    String   @db.VarChar(60)
+  entityId      String   @db.VarChar(80)
+  versionNumber Int      @default(1)
+  snapshotJson  String   @db.LongText
+  notes         String?  @db.Text
+  status        String   @db.VarChar(40)
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+}
+
+model CorrectionRequest {
+  id                   String    @id @default(cuid())
+  articleId            String?
+  actId                String?
+  requesterName        String    @db.VarChar(180)
+  requesterEmail       String    @db.VarChar(190)
+  requestType          String    @db.VarChar(50)
+  description          String    @db.Text
+  targetUrl            String?   @db.VarChar(700)
+  status               String    @default("OPEN") @db.VarChar(40)
+  adminNotes           String?   @db.Text
+  publicCorrectionNote String?   @db.Text
+  createdAt            DateTime  @default(now())
+  resolvedAt           DateTime?
+
+  article NewsArticle? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  act     GazetteAct?  @relation(fields: [actId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model Legislature {
+  id         String  @id @default(cuid())
+  title      String  @unique @db.VarChar(160)
+  startYear  Int
+  endYear    Int
+  totalSeats Int     @default(13)
+  isCurrent  Boolean @default(false)
+
+  councilors Councilor[]
+}
+
+model Councilor {
+  id                 String   @id @default(cuid())
+  legislatureId      String
+  fullName           String   @db.VarChar(200)
+  parliamentaryName  String   @db.VarChar(160)
+  slug               String   @unique @db.VarChar(160)
+  partyAcronym       String?  @db.VarChar(40)
+  roleInBoard        String?  @db.VarChar(120)
+  commissionsJson    String   @default("[]") @db.Text
+  photoUrl           String?  @db.VarChar(700)
+  photoLicenseNote   String?  @db.Text
+  officialProfileUrl String?  @db.VarChar(700)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  legislature  Legislature              @relation(fields: [legislatureId], references: [id], onDelete: Restrict)
+  propositions LegislativeProposition[]
+  attendances  SessionAttendance[]
+  votes        CouncilorVote[]
+
+  @@index([legislatureId, active])
+}
+
+model LegislativeProposition {
+  id               String    @id @default(cuid())
+  number           String    @db.VarChar(60)
+  year             Int
+  type             String    @db.VarChar(60)
+  summary          String    @db.Text
+  authorId         String?
+  presentationDate DateTime?
+  status           String    @default("EM_TRAMITACAO") @db.VarChar(80)
+  tramitationText  String?   @db.Text
+  officialUrl      String    @db.VarChar(700)
+  lastUpdated      DateTime  @default(now())
+
+  author Councilor?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  votes  LegislativeVote[]
+
+  @@unique([type, number, year])
+  @@index([year, type])
+}
+
+model ChamberSession {
+  id            String   @id @default(cuid())
+  sessionNumber String   @db.VarChar(60)
+  sessionDate   DateTime
+  sessionType   String   @default("ORDINARIA") @db.VarChar(60)
+  officialUrl   String?  @db.VarChar(700)
+  status        String   @default("REGISTRADA") @db.VarChar(60)
+  notes         String?  @db.Text
+
+  attendances SessionAttendance[]
+  votes       LegislativeVote[]
+
+  @@unique([sessionNumber, sessionDate])
+  @@index([sessionDate])
+}
+
+model SessionAttendance {
+  id            String  @id @default(cuid())
+  sessionId     String
+  councilorId   String
+  status        String  @db.VarChar(40)
+  justification String? @db.Text
+
+  session   ChamberSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  councilor Councilor      @relation(fields: [councilorId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, councilorId])
+}
+
+model LegislativeVote {
+  id            String  @id @default(cuid())
+  sessionId     String
+  propositionId String?
+  matterTitle   String  @db.VarChar(350)
+  resultSummary String  @db.VarChar(180)
+  officialUrl   String? @db.VarChar(700)
+
+  session        ChamberSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  proposition    LegislativeProposition? @relation(fields: [propositionId], references: [id], onDelete: SetNull)
+  councilorVotes CouncilorVote[]
+}
+
+model CouncilorVote {
+  id          String @id @default(cuid())
+  voteId      String
+  councilorId String
+  voteChoice  String @db.VarChar(40)
+
+  vote      LegislativeVote @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  councilor Councilor       @relation(fields: [councilorId], references: [id], onDelete: Cascade)
+
+  @@unique([voteId, councilorId])
+}
+
+model Supplier {
+  id             String   @id @default(cuid())
+  name           String   @db.VarChar(250)
+  documentType   String   @default("CNPJ") @db.VarChar(20)
+  documentMasked String   @unique @db.VarChar(32)
+  createdAt      DateTime @default(now())
+
+  contracts PublicContract[]
+}
+
+model BiddingProcess {
+  id                String    @id @default(cuid())
+  agencyId          String
+  processNumber     String    @db.VarChar(80)
+  modality          String    @db.VarChar(120)
+  objectDescription String    @db.Text
+  status            String    @db.VarChar(80)
+  publicationDate   DateTime?
+  openingDate       DateTime?
+  estimatedValue    Decimal?  @db.Decimal(15, 2)
+  officialUrl       String    @db.VarChar(700)
+  pncpId            String?   @unique @db.VarChar(120)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  agency    PublicAgency     @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  contracts PublicContract[]
+
+  @@unique([agencyId, processNumber])
+  @@index([publicationDate])
+  @@index([status])
+}
+
+model PublicContract {
+  id                String    @id @default(cuid())
+  agencyId          String
+  biddingId         String?
+  supplierId        String?
+  contractNumber    String    @db.VarChar(80)
+  objectDescription String    @db.Text
+  signatureDate     DateTime?
+  startDate         DateTime?
+  endDate           DateTime?
+  contractedValue   Decimal?  @db.Decimal(15, 2)
+  committedValue    Decimal?  @db.Decimal(15, 2)
+  liquidatedValue   Decimal?  @db.Decimal(15, 2)
+  paidValue         Decimal?  @db.Decimal(15, 2)
+  additivesTotal    Decimal?  @db.Decimal(15, 2)
+  status            String    @db.VarChar(80)
+  officialUrl       String    @db.VarChar(700)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  agency   PublicAgency    @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  bidding  BiddingProcess? @relation(fields: [biddingId], references: [id], onDelete: SetNull)
+  supplier Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@unique([agencyId, contractNumber])
+  @@index([signatureDate])
+}
+
+model PodcastProgram {
+  id                String  @id @default(cuid())
+  title             String  @unique @db.VarChar(180)
+  slug              String  @unique @db.VarChar(120)
+  formatDescription String  @db.Text
+  durationRange     String  @db.VarChar(80)
+  active            Boolean @default(true)
+
+  episodes PodcastEpisode[]
+}
+
+model PodcastEpisode {
+  id                   String    @id @default(cuid())
+  programId            String
+  episodeNumber        Int
+  title                String    @db.VarChar(250)
+  slug                 String    @unique @db.VarChar(190)
+  description          String    @db.Text
+  audioUrl             String?   @db.VarChar(700)
+  durationSeconds      Int?
+  publishedAt          DateTime?
+  status               String    @default("DRAFT") @db.VarChar(40)
+  syntheticVoiceNotice String    @db.Text
+  scriptMarkdown       String?   @db.LongText
+  notebookLmPrompt     String?   @db.LongText
+  sourcesJson          String    @default("[]") @db.Text
+  allowDownload        Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  program PodcastProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  @@index([programId, status])
+}
+
+model SocialPostDraft {
+  id               String    @id @default(cuid())
+  articleId        String
+  platform         String    @default("FACEBOOK") @db.VarChar(40)
+  shortText        String    @db.Text
+  headlineCardText String    @db.VarChar(300)
+  shareUrl         String    @db.VarChar(700)
+  scheduledAt      DateTime?
+  publishedUrl     String?   @db.VarChar(700)
+  status           String    @default("DRAFT") @db.VarChar(40)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}
+
+model SponsorAdvertiser {
+  id                     String   @id @default(cuid())
+  companyName            String   @db.VarChar(220)
+  cnpj                   String?  @db.VarChar(20)
+  contactEmail           String?  @db.VarChar(190)
+  startDate              DateTime
+  endDate                DateTime
+  destinationUrl         String   @db.VarChar(700)
+  bannerImageUrl         String?  @db.VarChar(700)
+  placement              String   @default("HOMEPAGE") @db.VarChar(40)
+  active                 Boolean  @default(false)
+  impressionsCount       Int      @default(0)
+  publicTransparencyNote String?  @db.Text
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}

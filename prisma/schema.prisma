@@ -1,0 +1,617 @@
+// Schema Prisma — Radar Rio Pardo
+// Compatível com SQLite (desenvolvimento local sem MySQL) e MySQL (produção Hostinger).
+// Para alternar o provedor: `npm run db:use-mysql` ou `npm run db:use-sqlite`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 1. SISTEMA, USUÁRIOS, SESSÕES E AUDITORIA
+// ============================================================================
+
+model User {
+  id                  String    @id @default(cuid())
+  name                String
+  email               String    @unique
+  passwordHash        String
+  role                String    @default("COLLABORATOR") // ADMIN | EDITOR | COLLABORATOR
+  active              Boolean   @default(true)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  authoredArticles   NewsArticle[]       @relation("ArticleAuthor")
+  reviewedArticles   NewsArticle[]       @relation("ArticleReviewer")
+  reviewedActs       GazetteAct[]        @relation("ActReviewer")
+  editorialRevisions EditorialRevision[]
+
+  @@index([role])
+  @@index([active])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  detailsJson String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson String
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// 2. FONTES OFICIAIS, ÓRGÃOS PÚBLICOS E INTEGRAÇÕES (COLETORES)
+// ============================================================================
+
+model PublicAgency {
+  id          String   @id @default(cuid())
+  name        String
+  acronym     String?
+  sphere      String   @default("MUNICIPAL") // MUNICIPAL | ESTADUAL | FEDERAL | AUTARQUIA
+  city        String   @default("São José do Rio Pardo")
+  state       String   @default("SP")
+  officialUrl String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sources         OfficialSource[]
+  gazetteEditions GazetteEdition[]
+  gazetteActs     GazetteAct[]
+  biddingProcesses BiddingProcess[]
+  publicContracts PublicContract[]
+
+  @@index([city, state])
+}
+
+model OfficialSource {
+  id               String   @id @default(cuid())
+  agencyId         String
+  name             String
+  slug             String   @unique
+  url              String
+  sourceType       String   // DIARIO_OFICIAL | API_PUBLICA | PORTAL_CAMARA | TRANSPARENCIA | OUTRO
+  termsNotes       String?
+  validationMethod String?
+  status           String   @default("CONFIGURED") // CONFIGURED | VERIFIED | ATTENTION | DISABLED
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  agency            PublicAgency         @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  adapters          IntegrationAdapter[]
+  importedDocuments ImportedDocument[]
+
+  @@index([sourceType])
+  @@index([active])
+}
+
+model IntegrationAdapter {
+  id            String    @id @default(cuid())
+  sourceId      String
+  adapterKey    String    @unique
+  name          String
+  frequencyCron String    @default("0 */6 * * *")
+  status        String    @default("IDLE") // IDLE | RUNNING | SUCCESS | ERROR | PENDING_CONFIG
+  lastRunAt     DateTime?
+  lastSuccessAt DateTime?
+  recordsCount  Int       @default(0)
+  lastError     String?
+  configJson    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  source OfficialSource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  runs   CollectionRun[]
+}
+
+model CollectionRun {
+  id              String    @id @default(cuid())
+  adapterId       String
+  status          String    @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | ERROR
+  triggerType     String    @default("MANUAL") // MANUAL | CRON | IMPORT
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  itemsFound      Int       @default(0)
+  itemsProcessed  Int       @default(0)
+  itemsDuplicated Int       @default(0)
+  errorCount      Int       @default(0)
+  logText         String?
+  checkpointJson  String?
+
+  adapter   IntegrationAdapter @relation(fields: [adapterId], references: [id], onDelete: Cascade)
+  documents ImportedDocument[]
+
+  @@index([adapterId, startedAt])
+}
+
+model ImportedDocument {
+  id               String    @id @default(cuid())
+  sourceId         String
+  runId            String?
+  externalId       String?
+  title            String
+  originalUrl      String
+  contentHash      String    @unique
+  mimeType         String    @default("text/html")
+  rawText          String?
+  extractionStatus String    @default("PENDING") // PENDING | EXTRACTED | PARTIAL | UNREADABLE
+  publishedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  source OfficialSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  run    CollectionRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([sourceId, createdAt])
+}
+
+// ============================================================================
+// 3. DIÁRIO OFICIAL MUNICIPAL
+// ============================================================================
+
+model GazetteEdition {
+  id              String   @id @default(cuid())
+  agencyId        String?
+  editionNumber   String
+  publicationDate DateTime
+  year            Int
+  month           Int
+  officialUrl     String
+  fileHash        String?  @unique
+  totalActs       Int      @default(0)
+  status          String   @default("PENDING_REVIEW") // PENDING_REVIEW | REVIEWED | PUBLISHED | ARCHIVED
+  summaryText     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agency PublicAgency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  acts   GazetteAct[]
+
+  @@unique([editionNumber, year])
+  @@index([publicationDate])
+  @@index([year, month])
+  @@index([status])
+}
+
+model GazetteActCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+
+  acts GazetteAct[]
+}
+
+model GazetteAct {
+  id              String    @id @default(cuid())
+  editionId       String
+  categoryId      String
+  agencyId        String?
+  actNumber       String?
+  actDate         DateTime?
+  pageNumber      Int?
+  titleSimple     String
+  objectiveSummary String
+  rawExcerpt      String?
+  financialValue  Decimal?
+  financialType   String?   // ESTIMATED | CONTRACTED | PAID | NONE
+  deadlinesText   String?
+  practicalImpact String?
+  officialUrl     String
+  contentHash     String    @unique
+  status          String    @default("IN_REVIEW") // DRAFT | IN_REVIEW | APPROVED | PUBLISHED | ARCHIVED
+  hasPersonalDataAlert Boolean @default(false)
+  aiGenerated     Boolean   @default(false)
+  aiModel         String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  edition    GazetteEdition      @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  category   GazetteActCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  agency     PublicAgency?       @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  reviewedBy User?               @relation("ActReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  references DocumentReference[]
+  corrections CorrectionRequest[]
+
+  @@index([editionId])
+  @@index([categoryId])
+  @@index([status])
+}
+
+// ============================================================================
+// 4. NOTÍCIAS, REVISÃO EDITORIAL E CORREÇÕES
+// ============================================================================
+
+model NewsCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  active      Boolean @default(true)
+
+  articles NewsArticle[]
+}
+
+model NewsArticle {
+  id                   String    @id @default(cuid())
+  title                String
+  slug                 String    @unique
+  subtitle             String?
+  summary              String
+  content              String
+  categoryId           String
+  tagsJson             String    @default("[]")
+  coverImageUrl        String?
+  status               String    @default("DRAFT") // DRAFT | IN_REVIEW | APPROVED | PUBLISHED | ARCHIVED
+  featured             Boolean   @default(false)
+  isPublicUtilityAlert Boolean   @default(false)
+  aiUsed               Boolean   @default(false)
+  aiDisclosure         String?
+  correctionNotice     String?
+  authorId             String
+  reviewerId           String?
+  publishedAt          DateTime?
+  scheduledFor         DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  category    NewsCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  author      User                @relation("ArticleAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  reviewer    User?               @relation("ArticleReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  references  DocumentReference[]
+  corrections CorrectionRequest[]
+  socialDrafts SocialPostDraft[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+  @@index([featured])
+}
+
+model DocumentReference {
+  id            String    @id @default(cuid())
+  articleId     String?
+  actId         String?
+  sourceName    String
+  officialUrl   String
+  documentDate  DateTime?
+  referenceCode String?
+  pageOrSection String?
+  consultedAt   DateTime  @default(now())
+
+  article NewsArticle? @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  act     GazetteAct?  @relation(fields: [actId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+  @@index([actId])
+}
+
+model EditorialRevision {
+  id            String   @id @default(cuid())
+  entityType    String   // NEWS_ARTICLE | GAZETTE_ACT | PODCAST_EPISODE
+  entityId      String
+  versionNumber Int      @default(1)
+  snapshotJson  String
+  notes         String?
+  status        String
+  createdById   String
+  createdAt     DateTime @default(now())
+
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+}
+
+model CorrectionRequest {
+  id                   String    @id @default(cuid())
+  articleId            String?
+  actId                String?
+  requesterName        String
+  requesterEmail       String
+  requestType          String    // CORRECTION | CONTESTATION | RIGHT_OF_REPLY | PROBLEM_REPORT | LGPD_REMOVAL
+  description          String
+  targetUrl            String?
+  status               String    @default("OPEN") // OPEN | IN_ANALYSIS | RESOLVED | REJECTED
+  adminNotes           String?
+  publicCorrectionNote String?
+  createdAt            DateTime  @default(now())
+  resolvedAt           DateTime?
+
+  article NewsArticle? @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  act     GazetteAct?  @relation(fields: [actId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+// ============================================================================
+// 5. CÂMARA MUNICIPAL (VEREADORES, PROPOSIÇÕES, SESSÕES E VOTAÇÕES)
+// ============================================================================
+
+model Legislature {
+  id         String  @id @default(cuid())
+  title      String  @unique
+  startYear  Int
+  endYear    Int
+  totalSeats Int     @default(13)
+  isCurrent  Boolean @default(false)
+
+  councilors Councilor[]
+}
+
+model Councilor {
+  id                 String   @id @default(cuid())
+  legislatureId      String
+  fullName           String
+  parliamentaryName  String
+  slug               String   @unique
+  partyAcronym       String?
+  roleInBoard        String?
+  commissionsJson    String   @default("[]")
+  photoUrl           String?
+  photoLicenseNote   String?
+  officialProfileUrl String?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  legislature  Legislature              @relation(fields: [legislatureId], references: [id], onDelete: Restrict)
+  propositions LegislativeProposition[]
+  attendances  SessionAttendance[]
+  votes        CouncilorVote[]
+
+  @@index([legislatureId, active])
+}
+
+model LegislativeProposition {
+  id               String    @id @default(cuid())
+  number           String
+  year             Int
+  type             String    // PROJETO_LEI | PROJETO_DECRETO | PROJETO_RESOLUCAO | REQUERIMENTO | INDICACAO | MOCAO | EMENDA
+  summary          String
+  authorId         String?
+  presentationDate DateTime?
+  status           String    @default("EM_TRAMITACAO")
+  tramitationText  String?
+  officialUrl      String
+  lastUpdated      DateTime  @default(now())
+
+  author Councilor?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  votes  LegislativeVote[]
+
+  @@unique([type, number, year])
+  @@index([year, type])
+}
+
+model ChamberSession {
+  id            String   @id @default(cuid())
+  sessionNumber String
+  sessionDate   DateTime
+  sessionType   String   @default("ORDINARIA") // ORDINARIA | EXTRAORDINARIA | SOLENE
+  officialUrl   String?
+  status        String   @default("REGISTRADA")
+  notes         String?
+
+  attendances SessionAttendance[]
+  votes       LegislativeVote[]
+
+  @@unique([sessionNumber, sessionDate])
+  @@index([sessionDate])
+}
+
+model SessionAttendance {
+  id            String  @id @default(cuid())
+  sessionId     String
+  councilorId   String
+  status        String  // PRESENT | ABSENT | JUSTIFIED | NOT_AVAILABLE
+  justification String?
+
+  session   ChamberSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  councilor Councilor      @relation(fields: [councilorId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, councilorId])
+}
+
+model LegislativeVote {
+  id            String  @id @default(cuid())
+  sessionId     String
+  propositionId String?
+  matterTitle   String
+  resultSummary String
+  officialUrl   String?
+
+  session        ChamberSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  proposition    LegislativeProposition? @relation(fields: [propositionId], references: [id], onDelete: SetNull)
+  councilorVotes CouncilorVote[]
+}
+
+model CouncilorVote {
+  id          String @id @default(cuid())
+  voteId      String
+  councilorId String
+  voteChoice  String // FAVORAVEL | CONTRARIO | ABSTENCAO | AUSENCIA | IMPEDIMENTO | NAO_VOTANTE_REGIMENTAL | NAO_DISPONIVEL
+
+  vote      LegislativeVote @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  councilor Councilor       @relation(fields: [councilorId], references: [id], onDelete: Cascade)
+
+  @@unique([voteId, councilorId])
+}
+
+// ============================================================================
+// 6. CONTAS PÚBLICAS, LICITAÇÕES E CONTRATOS
+// ============================================================================
+
+model Supplier {
+  id             String   @id @default(cuid())
+  name           String
+  documentType   String   @default("CNPJ") // CNPJ | CPF_MASKED
+  documentMasked String   @unique
+  createdAt      DateTime @default(now())
+
+  contracts PublicContract[]
+}
+
+model BiddingProcess {
+  id                String    @id @default(cuid())
+  agencyId          String
+  processNumber     String
+  modality          String
+  objectDescription String
+  status            String
+  publicationDate   DateTime?
+  openingDate       DateTime?
+  estimatedValue    Decimal?
+  officialUrl       String
+  pncpId            String?   @unique
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  agency    PublicAgency     @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  contracts PublicContract[]
+
+  @@unique([agencyId, processNumber])
+  @@index([publicationDate])
+  @@index([status])
+}
+
+model PublicContract {
+  id                String    @id @default(cuid())
+  agencyId          String
+  biddingId         String?
+  supplierId        String?
+  contractNumber    String
+  objectDescription String
+  signatureDate     DateTime?
+  startDate         DateTime?
+  endDate           DateTime?
+  contractedValue   Decimal?
+  committedValue    Decimal?
+  liquidatedValue   Decimal?
+  paidValue         Decimal?
+  additivesTotal    Decimal?
+  status            String
+  officialUrl       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  agency   PublicAgency    @relation(fields: [agencyId], references: [id], onDelete: Restrict)
+  bidding  BiddingProcess? @relation(fields: [biddingId], references: [id], onDelete: SetNull)
+  supplier Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@unique([agencyId, contractNumber])
+  @@index([signatureDate])
+}
+
+// ============================================================================
+// 7. PODCASTS E REDES SOCIAIS (FACEBOOK / NOTEBOOKLM)
+// ============================================================================
+
+model PodcastProgram {
+  id                String  @id @default(cuid())
+  title             String  @unique
+  slug              String  @unique
+  formatDescription String
+  durationRange     String
+  active            Boolean @default(true)
+
+  episodes PodcastEpisode[]
+}
+
+model PodcastEpisode {
+  id                  String    @id @default(cuid())
+  programId           String
+  episodeNumber       Int
+  title               String
+  slug                String    @unique
+  description         String
+  audioUrl            String?
+  durationSeconds     Int?
+  publishedAt         DateTime?
+  status              String    @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
+  syntheticVoiceNotice String   @default("Episódio produzido com vozes sintéticas e revisão editorial humana.")
+  scriptMarkdown      String?
+  notebookLmPrompt    String?
+  sourcesJson         String    @default("[]")
+  allowDownload       Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  program PodcastProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  @@index([programId, status])
+}
+
+model SocialPostDraft {
+  id               String    @id @default(cuid())
+  articleId        String
+  platform         String    @default("FACEBOOK")
+  shortText        String
+  headlineCardText String
+  shareUrl         String
+  scheduledAt      DateTime?
+  publishedUrl     String?
+  status           String    @default("DRAFT") // DRAFT | SCHEDULED | PUBLISHED_MANUALLY
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  article NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// 8. MONETIZAÇÃO E TRANSPARÊNCIA COMERCIAL (ESTRUTURA FUTURA)
+// ============================================================================
+
+model SponsorAdvertiser {
+  id                     String   @id @default(cuid())
+  companyName            String
+  cnpj                   String?
+  contactEmail           String?
+  startDate              DateTime
+  endDate                DateTime
+  destinationUrl         String
+  bannerImageUrl         String?
+  placement              String   @default("HOMEPAGE") // HOMEPAGE | NEWS | GAZETTE | PODCAST
+  active                 Boolean  @default(false)
+  impressionsCount       Int      @default(0)
+  publicTransparencyNote String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}

@@ -1,0 +1,34 @@
+# Dependências
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+
+# Next.js
+/.next/
+/out/
+
+# Produção e builds
+/build
+
+# Variáveis de ambiente e segredos locais
+.env
+.env*.local
+
+# Bancos locais SQLite de desenvolvimento
+/prisma/*.db
+/prisma/*.db-journal
+/prisma/dev.db*
+
+# Logs e debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Sistema e IDE
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+next-env.d.ts
+coverage/

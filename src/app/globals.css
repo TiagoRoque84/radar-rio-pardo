@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-page: #f3f6f9;
+  --bg-surface: #ffffff;
+  --text-primary: #10263d;
+  --text-secondary: #526174;
+  --border-subtle: #d8e1eb;
+}
+
+.dark {
+  --bg-page: #0b1623;
+  --bg-surface: #122234;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --border-subtle: #243b55;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Foco visível de alto contraste (WCAG 2.2 AA) */
+  :focus-visible {
+    outline: 3px solid #d6a34f;
+    outline-offset: 2px;
+  }
+}
+
+.radar-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: #10263d;
+  color: #ffffff;
+  padding: 0.75rem 1.25rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  border-radius: 0.5rem;
+}
