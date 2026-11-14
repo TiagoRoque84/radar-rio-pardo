@@ -224,4 +224,15 @@ describe("Regressão Técnica — IBGE, PNCP, Segurança e Schema MySQL", () => 
     expect(mysqlSchema).toContain("model PasswordResetToken");
     expect(migrationSql).toContain("CREATE TABLE IF NOT EXISTS `PasswordResetToken`");
   });
+
+  it("configura next.config.ts com paralelismo reduzido para evitar EAGAIN na Hostinger", () => {
+    const root = process.cwd();
+    const nextConfigContent = fs.readFileSync(path.join(root, "next.config.ts"), "utf8");
+
+    expect(nextConfigContent).toContain("cpus: 1");
+    expect(nextConfigContent).toContain("workerThreads: false");
+    expect(nextConfigContent).toContain("webpackBuildWorker: false");
+    expect(nextConfigContent).toContain("staticGenerationMaxConcurrency: 1");
+    expect(nextConfigContent).toContain("staticGenerationMinPagesPerWorker: 25");
+  });
 });

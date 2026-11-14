@@ -5,6 +5,17 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  // Reduz paralelismo e uso de processos filhos no build para compatibilidade com Hostinger Cloud Startup (CloudLinux NPROC)
+  experimental: {
+    cpus: 1,
+    // No Next.js 15.5.29, workerThreads: true causa DataCloneError ao clonar nextConfig (headers/generateBuildId) via postMessage
+    workerThreads: false,
+    webpackBuildWorker: false,
+    parallelServerCompiles: false,
+    parallelServerBuildTraces: false,
+    staticGenerationMaxConcurrency: 1,
+    staticGenerationMinPagesPerWorker: 25,
+  },
   async headers() {
     return [
       {
