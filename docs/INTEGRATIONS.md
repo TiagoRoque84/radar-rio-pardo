@@ -63,6 +63,15 @@ genérico que aceite qualquer link da página inicial.
   primeiros bytes e cancela a transferência. A resposta inclui
   `pdfCheck.status=PDF_HEADER_VERIFIED` quando a assinatura é encontrada.
   **Isso não significa que o conteúdo do PDF foi extraído ou autenticado.**
+- **Experimento de camada textual por página:** a consulta exclusiva da prévia
+  `/api/diagnostics/diario-source?kind=Decretos&inspect=1&pdf=2`
+  utiliza `pdf-parse@2.4.5` apenas no Node.js, lê no máximo 4 MB do PDF,
+  limita o documento a 30 páginas e examina até 8 páginas iniciais. Devolve
+  número da edição, total de páginas, páginas candidatas ao cabeçalho do ato
+  e status técnico — **jamais devolve o texto extraído**. Uma ocorrência do
+  número não comprova que o ato inteiro foi extraído, nem gera um resumo
+  ou a publicação de qualquer conteúdo. Documentos escaneados sem camada
+  textual precisam de verificação manual e eventual OCR separado.
   Sem dependência dedicada para texto PDF, a análise de páginas, OCR,
   valores, atos múltiplos e resumos do arquivo segue pendente. Não publicar
   notícia a partir de uma verificação somente de cabeçalho.
