@@ -85,6 +85,18 @@ describe("Camada de texto de PDF oficial - somente leitura", () => {
     expect(r.databaseAccess).toBe(false);
   });
 
+  it("classifica a etapa da falha de um PDF inválido sem expor o erro interno", async () => {
+    const r = await scanOfficialPdfForAct(item, {
+      fetchImpl: (async () => new Response("%PDF-1.7\\nconteúdo inválido", {
+        headers: { "content-type": "application/pdf" },
+      })) as typeof fetch,
+    });
+    expect(r.status).toBe("PDF_PARSE_ERROR");
+    expect(["WORKER_INIT", "PARSER_IMPORT", "PDF_INIT", "GET_INFO", "GET_TEXT"]).toContain(r.failureStage);
+    expect(JSON.stringify(r)).not.toContain("Error:");
+    expect(r.databaseAccess).toBe(false);
+  });
+
   it("identifica número e página no PDF sintético com texto pesquisável", async () => {
     const pdf = onePagePdf("DECRETO N. 8.140, DE 12 DE NOVEMBRO DE 2026.");
     const r = await scanOfficialPdfForAct(item, {
