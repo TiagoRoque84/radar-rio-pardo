@@ -124,7 +124,7 @@ export function parseOfficialActListing(
     const editionUrl = linkIn(cells[4], "edition");
     const textUrl = cells[5] ? linkIn(cells[5], "text") : null;
     if (!date || !/^\d{1,6}$/.test(editionNumber) || !editionUrl || title.length < 4) continue;
-    const key = kind + ":" + editionNumber + ":" + date.getUTCFullYear() + ":" + plain(title);
+    const key = kind + ":" + editionNumber + ":" + date.getUTCFullYear() + ":" + plain(title) + ":" + (textUrl ?? "");
     if (seen.has(key)) continue;
     seen.add(key);
     items.push({ kind, title, editionNumber, publicationDate: date, editionUrl, textUrl });
