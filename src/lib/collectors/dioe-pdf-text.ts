@@ -2,6 +2,7 @@ import type { ListedOfficialAct, OfficialActKind } from "./dioe-parser";
 import { extractListingActNumber } from "./dioe-parser";
 import { isMatchingEditionPdf } from "./dioe-pdf-probe";
 import { RADAR_USER_AGENT } from "./types";
+import { identifyOfficialActPageSpan, type OfficialPdfPage, type OfficialActPageSpan } from "./dioe-pdf-boundaries";
 
 // Maximum download for one explicitly requested preview diagnostic.
 // Keep a strict cap; PDF parsing also allocates memory beyond file size.
@@ -33,6 +34,7 @@ export interface PdfTextScan {
   declaredBytes?: number;
   limitBytes?: number;
   httpStatus?: number;
+  pageSpanCheck?: OfficialActPageSpan;
   /** Stable diagnostic stage; never exposes raw exception messages or server paths. */
   failureStage?: "DOWNLOAD" | "WORKER_INIT" | "PARSER_IMPORT" | "PDF_INIT" | "GET_INFO" | "GET_TEXT" | "CLEANUP";
   /** Never send actual original PDF text to diagnostics. */
@@ -65,7 +67,7 @@ export function pageMentionsOfficialAct(
 
 export async function scanOfficialPdfForAct(
   item: ListedOfficialAct,
-  options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}
+  options: { fetchImpl?: typeof fetch; timeoutMs?: number; inspectPageSpan?: boolean } = {}
 ): Promise<PdfTextScan> {
   const base = {
     editionNumber: item.editionNumber,
@@ -169,10 +171,12 @@ export async function scanOfficialPdfForAct(
       const pagesScanned = Math.min(pageCount, MAX_SCAN_PAGES);
       let hasText = false;
       const matchingPages: number[] = [];
+      const pageMarkers: OfficialPdfPage[] = [];
       for (let page = 1; page <= pagesScanned; page++) {
         failureStage = "GET_TEXT";
         const result = await parser.getText({ partial: [page] });
         const text = result.text.slice(0, MAX_PAGE_TEXT_CHARS);
+        if (options.inspectPageSpan) pageMarkers.push({ pageNumber: page, text });
         if (text.trim().length > 20) hasText = true;
         if (pageMentionsOfficialAct(text, item.kind, base.expectedActNumber)) {
           matchingPages.push(page);
@@ -183,6 +187,12 @@ export async function scanOfficialPdfForAct(
         status: matchingPages.length ? "ACT_MATCHED" :
           hasText ? "ACT_NOT_FOUND_IN_SCAN" : "NO_TEXT_LAYER",
         pageCount, pagesScanned, matchingPages,
+        ...(options.inspectPageSpan ? {
+          pageSpanCheck: identifyOfficialActPageSpan(
+            pageMarkers, item.kind, base.expectedActNumber,
+            item.publicationDate.getUTCFullYear()
+          ),
+        } : {}),
         bytesDownloaded: bytes,
       };
     } finally {
