@@ -74,9 +74,16 @@ genérico que aceite qualquer link da página inicial.
   número não comprova que o ato inteiro foi extraído, nem gera um resumo
   ou a publicação de qualquer conteúdo. Documentos escaneados sem camada
   textual precisam de verificação manual e eventual OCR separado.
-  Sem dependência dedicada para texto PDF, a análise de páginas, OCR,
-  valores, atos múltiplos e resumos do arquivo segue pendente. Não publicar
-  notícia a partir de uma verificação somente de cabeçalho.
+- **Conferência da extensão do ato por marcadores do próprio PDF:** no
+  diagnóstico temporário `pdf=3`, o leitor procura a identificação
+  explícita da mesma numeração de ato/ano e a sequência impressa
+  `Página 1 de N`, `Página 2 de N` etc. Só retorna
+  `PAGE_MARKERS_COMPLETE` quando todos os marcadores estão presentes
+  em páginas consecutivas. O escopo é **PAGE_LEVEL_ONLY**: ainda pode
+  haver texto de outros atos na mesma página, e nenhum trecho é publicado,
+  devolvido ao usuário ou gravado em banco nesta etapa. Os limites do
+  `pdf=2` (12 MB, 30 páginas, máximo 8 páginas examinadas) continuam
+  vigentes. Não publicar notícia somente com base nos marcadores.
 - **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
   a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
