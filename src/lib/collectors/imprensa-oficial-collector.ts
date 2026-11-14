@@ -9,10 +9,9 @@ import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import {
   OfficialActKind,
   ListedOfficialAct,
-  listingUrl,
-  parseOfficialActListing,
   parseOfficialActText,
 } from "./dioe-parser";
+import { fetchOfficialActListing } from "./dioe-reader";
 
 /**
  * Coletor estruturado da seção "Listar Atos" do Diário Oficial de São José do Rio Pardo.
@@ -23,7 +22,6 @@ import {
  * Não gera afirmações por IA e nunca publica automaticamente.
  */
 const KINDS: OfficialActKind[] = ["Leis", "Decretos", "Portarias"];
-const MAX_LIST_BYTES = 2_000_000;
 const MAX_ITEMS_PER_KIND = 12;
 const MAX_DETAIL_REQUESTS = 6;
 const MAX_RUN_MS = 40_000;
@@ -184,19 +182,20 @@ export async function runImprensaOficialCollector(
     }
 
     try {
-      const url = listingUrl(kind);
-      const response = await fetchWithTimeout(url, {
+      const listing = await fetchOfficialActListing(kind, {
+        maxItems: MAX_ITEMS_PER_KIND,
+        maxBytes: 1_500_000,
         timeoutMs: 9000,
-        accept: "text/html",
       });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      const html = await response.text();
-      if (html.length > MAX_LIST_BYTES) throw new Error("Listagem excedeu tamanho de segurança.");
-      if (/cf-turnstile|recaptcha|g-recaptcha/i.test(html)) {
-        throw new Error("Desafio anti-bot detectado; não foi contornado.");
+      const { items } = listing;
+      if (listing.hitByteLimit) {
+        incomplete = true;
+        logs.push(kind + ": limite de leitura de HTML atingido; verificação parcial.");
       }
-
-      const items = parseOfficialActListing(html, kind, MAX_ITEMS_PER_KIND);
+      logs.push(
+        kind + ": leitura incremental de " + listing.bytesRead +
+        " bytes, encerrada após os registros recentes ou o limite de segurança."
+      );
       if (items.length === 0) {
         errors++;
         logs.push(kind + ": nenhuma linha estruturada válida; possível alteração no HTML.");
