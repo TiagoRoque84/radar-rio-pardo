@@ -97,6 +97,27 @@ describe("Camada de texto de PDF oficial - somente leitura", () => {
     expect(r.databaseAccess).toBe(false);
   });
 
+  it("confirma a extensão por marcador explícito em PDF sintético, sem devolver texto", async () => {
+    const pdf = onePagePdf("DECRETO N. 8.140/2026 - PAGINA 1 DE 1");
+    const result = await scanOfficialPdfForAct(item, {
+      inspectPageSpan: true,
+      fetchImpl: (async () => new Response(pdf, {
+        headers: { "content-type": "application/pdf" },
+      })) as typeof fetch,
+    });
+    expect(result.status).toBe("ACT_MATCHED");
+    expect(result.pageSpanCheck).toEqual({
+      status: "PAGE_MARKERS_COMPLETE",
+      startPage: 1,
+      endPage: 1,
+      declaredActPages: 1,
+      verifiedPageMarkers: 1,
+      scope: "PAGE_LEVEL_ONLY",
+    });
+    expect(result.textContentReturned).toBe(false);
+    expect(result.databaseAccess).toBe(false);
+  });
+
   it("identifica número e página no PDF sintético com texto pesquisável", async () => {
     const pdf = onePagePdf("DECRETO N. 8.140, DE 12 DE NOVEMBRO DE 2026.");
     const r = await scanOfficialPdfForAct(item, {
