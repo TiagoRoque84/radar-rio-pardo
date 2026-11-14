@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // PDF parser runs only in server-side Node, with native canvas optional dependency.
+  serverExternalPackages: ["pdf-parse", "@napi-rs/canvas"],
   images: {
     unoptimized: true,
   },
