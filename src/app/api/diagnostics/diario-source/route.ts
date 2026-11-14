@@ -2,17 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { listingUrl, parseOfficialActListing } from "@/lib/collectors/dioe-parser";
 
 /**
- * Diagnóstico somente leitura da fonte externa, exclusivo para previews Hostinger.
+ * Diagnóstico somente leitura da fonte externa, entregue apenas na branch de preview.
+ * Não confiar no hostname de NextRequest para identificar o preview: o proxy
+ * reverso da hospedagem pode expor o hostname interno ao Next.js.
+ * REMOVER ESTE ENDPOINT ANTES DE FAZER MERGE NA BRANCH MAIN.
  * Nunca acessa Prisma, banco, credenciais, seeds ou endpoints administrativos.
  * Não aceita URL arbitrária e não devolve HTML/trechos originais.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (!request.nextUrl.hostname.endsWith(".hostingersite.com")) {
-    return NextResponse.json({ error: "Disponível apenas no preview." }, { status: 404 });
-  }
-
   const kind = request.nextUrl.searchParams.get("kind") ?? "Decretos";
   if (kind !== "Decretos" && kind !== "Leis" && kind !== "Portarias") {
     return NextResponse.json({ error: "Tipo de ato inválido." }, { status: 400 });
