@@ -6,6 +6,7 @@ import {
   listingUrl,
   parseOfficialActListing,
   parseOfficialActText,
+  extractListingActNumber,
   safeOfficialUrl,
 } from "../src/lib/collectors/dioe-parser";
 
@@ -69,6 +70,40 @@ describe("Coletor estruturado do Diário Oficial: parser defensivo", () => {
       .toContain("Decreto");
     expect(isRioPardoOfficialHtml("<p>Município de S&#227;o Jos&#233; do Rio Pardo</p>"))
       .toBe(true);
+  });
+
+  it("não confunde a data de publicação com a data impressa no decreto", () => {
+    const official = "<h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1>" +
+      "<p>Publicado em 10 de novembro de 2026 | Edição nº 1927 | Ano IX</p>" +
+      "<h2>DECRETO Nº 8.139, DE 10 DE NOVEMBRO DE 2026.</h2>" +
+      "<blockquote>Dispõe sobre procedimentos administrativos.</blockquote>";
+    const detail = parseOfficialActText(official, "1927", {
+      kind: "Decretos",
+      listingTitle: "8139 - Decreto, de 20 de novembro de 2026 - encerramento do ano",
+    });
+    expect(detail?.verifiedActNumber).toBe("8139");
+    expect(detail?.verifiedActDate?.toISOString().slice(0, 10)).toBe("2026-11-10");
+    expect(extractListingActNumber("8139 - Decreto, de 20 de novembro")).toBe("8139");
+  });
+
+  it("rejeita texto de outro decreto mesmo na mesma edição", () => {
+    const official = "<h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1>" +
+      "<p>Publicado em 10 de novembro de 2026 | Edição nº 1927</p>" +
+      "<h2>DECRETO Nº 8.138, DE 10 DE NOVEMBRO DE 2026.</h2>";
+    expect(parseOfficialActText(official, "1927", {
+      kind: "Decretos", listingTitle: "8139 - Decreto",
+    })).toBeNull();
+  });
+
+  it("não preenche data do ato quando a fonte não informa cabeçalho verificável", () => {
+    const official = "<h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1>" +
+      "<p>Publicado em 10 de novembro de 2026 | Edição nº 1927</p>" +
+      "<p>Comunicado relacionado a Decreto.</p>";
+    const result = parseOfficialActText(official, "1927", {
+      kind: "Decretos", listingTitle: "8139 - Decreto",
+    });
+    expect(result?.verifiedActDate).toBeNull();
+    expect(result?.verifiedActNumber).toBeNull();
   });
 
   it("extrai somente ementa indicada na fonte e confere número da edição", () => {
