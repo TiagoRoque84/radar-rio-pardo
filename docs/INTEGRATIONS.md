@@ -34,6 +34,11 @@ genérico que aceite qualquer link da página inicial.
   com host permitido e, quando possível, ementa obtida na página pública de leitura.
 - **Limites operacionais:** até 12 itens recentes por tipo de ato, 6 detalhes por
   execução e 40 segundos de processamento; execuções parciais são identificadas.
+- **Listagens volumosas:** em vez de baixar o histórico inteiro, lê o HTML
+  incrementalmente (até 1,5 MB de corpo decodificado) e cancela a transferência
+  após identificar 12 registros válidos (ou 3 no diagnóstico). Caso chegue ao
+  limite sem completar a amostra, identifica a execução como parcial. Não ignora
+  erros HTTP nem tenta superar CAPTCHA.
 - **Persistência:** os metadados entram em GazetteEdition e ImportedDocument;
   cada ato é criado em GazetteAct com status `DRAFT_IMPORTED`.
 - **Revisão:** o editor confere o texto original, reescreve o resumo no painel e
