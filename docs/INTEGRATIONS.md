@@ -8,7 +8,7 @@ O módulo de coleta (`src/lib/collectors/`) é independente dos demais módulos 
 
 | Chave do Adaptador | Fonte | URL | Método / Status |
 | --- | --- | --- | --- |
-| `imprensa-oficial-sjrp` | Diário Oficial Eletrônico de São José do Rio Pardo | `https://www.imprensaoficialmunicipal.com.br/sjriopardo` | Leitura das listas estruturadas oficiais de Leis, Decretos e Portarias em `/listaatos.php?c=São José do Rio Pardo&s=...`; valida município/edição/URL e, quando disponível, consulta `/leituratexto` para capturar a ementa. Cria edição e ato em `DRAFT_IMPORTED`, sem publicação automática. Não cobre integralmente os PDFs. |
+| `imprensa-oficial-sjrp` | Diário Oficial Eletrônico de São José do Rio Pardo | `https://www.imprensaoficialmunicipal.com.br/sjriopardo` | Leitura das listas estruturadas oficiais de Leis, Decretos e Portarias em `/listaatos.php?c=São José do Rio Pardo&s=...`; valida município/edição/URL e extrai o texto via `/leituratexto` ou via segmentação limitada do PDF oficial (`pdf-parse`, máx. 2 PDFs distintos por execução + cache em memória por edição) quando há marcadores completos. Aplica mascaramento LGPD, sinaliza anexos/tabelas e cria edição/ato em `DRAFT_IMPORTED` para revisão humana obrigatória. Não cobre licitações ou PDFs sem marcadores. |
 | `pncp-api-sjrp` | Portal Nacional de Contratações Públicas (PNCP) | `https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao` | **API REST pública oficial** filtrando pelo código IBGE `3549706` (São José do Rio Pardo) e parâmetro obrigatório `codigoModalidadeContratacao`, com paginação dinâmica completa, retries moderados (HTTP 429/5xx/timeout), checkpoint persistente, validação rigorosa de município/órgão via CNPJ e fila manual (`PENDING_CLASSIFICATION`) para órgãos não reconhecidos. |
 | `camara-sjrp-check` | Portal da Câmara Municipal | `https://camarasjriopardo.sp.gov.br/` | Monitor de disponibilidade HTTP. Coleta detalhada pendente de validação estrutural de dados abertos; utilizar cadastro/importação assistida no `/admin/camara`. |
 | `transparencia-prefeitura-check` | Portal da Transparência da Prefeitura | `https://saojosedoriopardo.sp.gov.br/portal-da-transparencia-home/` | Monitor de disponibilidade HTTP + importação assistida de planilhas/JSON oficiais. |
@@ -31,19 +31,40 @@ listas públicas de Leis, Decretos e Portarias. O coletor usa essas listas, não
 genérico que aceite qualquer link da página inicial.
 
 - **Validação:** título, data (DD/MM/AAAA), número da edição, município, link oficial
-  com host permitido e, quando possível, ementa obtida na página pública de leitura.
-- **Limites operacionais:** até 12 itens recentes por tipo de ato, 6 detalhes por
-  execução e 40 segundos de processamento; execuções parciais são identificadas.
+  com host permitido e extração verificada via `/leituratexto` ou segmento PDF (`extractOfficialPdfActForReview`).
+- **Limites operacionais:** até 12 itens recentes por tipo de ato, 6 detalhes HTML por
+  execução, até 2 PDFs de edições distintos por execução (com cache de páginas em
+  memória na mesma execução para atos da mesma edição, até 12 MB, 30 páginas totais
+  e 8 páginas escaneadas por PDF) e 40 segundos de processamento; execuções parciais são identificadas.
 - **Listagens volumosas:** em vez de baixar o histórico inteiro, lê o HTML
   incrementalmente (até 1,5 MB de corpo decodificado) e cancela a transferência
   após identificar 12 registros válidos (ou 3 no diagnóstico). Caso chegue ao
   limite sem completar a amostra, identifica a execução como parcial. Não ignora
   erros HTTP nem tenta superar CAPTCHA.
-- **Persistência:** os metadados entram em GazetteEdition e ImportedDocument;
-  cada ato é criado em GazetteAct com status `DRAFT_IMPORTED`.
-- **Revisão:** o editor confere o texto original, reescreve o resumo no painel e
-  salva como `IN_REVIEW`; o endpoint de publicação bloqueia diretamente
-  `DRAFT_IMPORTED`. A IA não publica conteúdo.
+- **Extração PDF integrada à fila editorial (`ImportedDocument` + `GazetteAct`):**
+  - Quando não há texto HTML (`/leituratexto`) e o PDF oficial da edição possui camada
+    textual, marcadores completos (`Página 1 de N` ... `Página N de N` em linhas separadas),
+    cabeçalho compatível na primeira página e ausência de outro ato misturado (`OTHER_ACT_DETECTED`),
+    o segmento limpo é sanitizado pela LGPD (`detectAndMaskPersonalData`) e salvo como candidato
+    à revisão (`rawText` em `ImportedDocument` e `rawExcerpt` em `GazetteAct`), preservando
+    `pageNumber`, `actNumber` e `actDate` confirmados no cabeçalho oficial.
+  - O `extractionStatus` em `ImportedDocument` distingue claramente: `EXTRACTED_HTML_FOR_REVIEW`,
+    `EXTRACTED_PDF_FOR_REVIEW`, `EXTRACTED_PDF_ANNEX_CHECK` (quando há menção a anexos ou
+    indício de tabelas/valores financeiros no texto linear) e diagnósticos de falha/retenção
+    (`METADATA_ONLY_NO_TEXT_LAYER`, `METADATA_ONLY_INCOMPLETE_MARKERS`, `METADATA_ONLY_MIXED_TEXT`,
+    `METADATA_ONLY_PDF_TOO_LARGE`, `METADATA_ONLY_HTTP_ERROR`, `METADATA_ONLY_ACT_NOT_FOUND`,
+    `METADATA_ONLY_PARSE_ERROR`, `METADATA_ONLY`).
+  - **Atualização segura de rascunhos sem duplicação:** rascunhos previamente gravados como
+    `METADATA_ONLY*` que ainda estejam em `DRAFT_IMPORTED` são atualizados em transação
+    quando o texto verificado se torna disponível; atos que já avançaram para `IN_REVIEW`,
+    `APPROVED` ou `PUBLISHED` nunca são sobrescritos.
+- **Revisão no painel `/admin/diario-oficial`:** os metadados entram em `GazetteEdition` e
+  `ImportedDocument`, e cada ato é criado em `GazetteAct` com status `DRAFT_IMPORTED` (nunca
+  publicado automaticamente). O editor visualiza o texto extraído sanitizado em área própria,
+  confere alertas de LGPD e anexos/tabelas, abre os links oficiais do ato e do PDF da edição,
+  confirma número/data/página/órgão e redige o resumo cidadão (`SAVE_DRAFT` ou `SEND_TO_REVIEW`
+  para `IN_REVIEW`, registrando `EditorialRevision` e `AuditLog`). O endpoint de publicação
+  bloqueia diretamente `DRAFT_IMPORTED`. A IA não publica conteúdo.
 - **Integridade de datas e órgãos:** a data da listagem é a **publicação** e
   não é automaticamente copiada para a data do ato; `GazetteAct.actDate`
   permanece vazia quando a data não é confirmada no cabeçalho do texto

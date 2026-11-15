@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ListedOfficialAct } from "../src/lib/collectors/dioe-parser";
 import {
+  extractOfficialPdfActForReview,
   pageMentionsOfficialAct,
   scanOfficialPdfForAct,
+  type CachedEditionPdfPages,
 } from "../src/lib/collectors/dioe-pdf-text";
 
 const item: ListedOfficialAct = {
@@ -14,20 +16,29 @@ const item: ListedOfficialAct = {
   textUrl: null,
 };
 
-/** Generate a minimal PDF fixture entirely inside CI; no real documents. */
-function onePagePdf(line: string): Uint8Array {
+/** Generate a minimal multi-page PDF fixture entirely inside CI; no real documents. */
+function multiPagePdf(pageLines: string[]): Uint8Array {
   const escape = (s: string) => s.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-  const commands = line.split("\n").map((part, i) =>
-    (i === 0 ? "" : "0 -22 Td ") + "(" + escape(part) + ") Tj"
-  ).join(" ");
-  const stream = "BT /F1 16 Tf 50 740 Td " + commands + " ET";
-  const objects = [
+  const pageCount = pageLines.length;
+  const kids = Array.from({ length: pageCount }, (_, i) => `${4 + 2 * i} 0 R`).join(" ");
+  const objects: string[] = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
-    "<< /Length " + stream.length + " >>\nstream\n" + stream + "\nendstream",
+    `<< /Type /Pages /Kids [${kids}] /Count ${pageCount} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
+  pageLines.forEach((line, i) => {
+    const commands = line
+      .split("\n")
+      .map((part, idx) => (idx === 0 ? "" : "0 -22 Td ") + "(" + escape(part) + ") Tj")
+      .join(" ");
+    const stream = "BT /F1 16 Tf 50 740 Td " + commands + " ET";
+    const streamObjId = 5 + 2 * i;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${streamObjId} 0 R >>`
+    );
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
   objects.forEach((obj, i) => {
@@ -35,12 +46,17 @@ function onePagePdf(line: string): Uint8Array {
     pdf += (i + 1) + " 0 obj\n" + obj + "\nendobj\n";
   });
   const xref = pdf.length;
-  pdf += "xref\n0 6\n0000000000 65535 f \n";
+  const totalWithFree = objects.length + 1;
+  pdf += `xref\n0 ${totalWithFree}\n0000000000 65535 f \n`;
   offsets.slice(1).forEach(offset => {
     pdf += String(offset).padStart(10, "0") + " 00000 n \n";
   });
-  pdf += "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
+  pdf += `trailer\n<< /Size ${totalWithFree} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new TextEncoder().encode(pdf);
+}
+
+function onePagePdf(line: string): Uint8Array {
+  return multiPagePdf([line]);
 }
 
 describe("Camada de texto de PDF oficial - somente leitura", () => {
@@ -156,5 +172,75 @@ describe("Camada de texto de PDF oficial - somente leitura", () => {
     expect(r.matchingPages).toEqual([1]);
     expect(r.textContentReturned).toBe(false);
     expect(r.collected).toBe(false);
+  });
+
+  it("extrai segmento e cabeçalho verificado no helper server-side sem vazar no scan público", async () => {
+    const pdf = multiPagePdf([
+      [
+        "DECRETO N. 8.140/2026 - PAGINA 1 DE 2",
+        "DECRETO N. 8.140, DE 12 DE NOVEMBRO DE 2026.",
+        "Art. 1 Atualiza UFM em R$ 195,62.",
+      ].join("\n"),
+      [
+        "DECRETO N. 8.140/2026 - PAGINA 2 DE 2",
+        "Art. 2 Entra em vigor na data de sua publicacao.",
+      ].join("\n"),
+    ]);
+
+    const extracted = await extractOfficialPdfActForReview(item, {
+      fetchImpl: (async () => new Response(pdf, {
+        headers: { "content-type": "application/pdf" },
+      })) as typeof fetch,
+    });
+    expect(extracted.scan.status).toBe("ACT_MATCHED");
+    expect(extracted.scan.segmentCheck?.status).toBe("SEGMENT_PREPARED_FOR_REVIEW");
+    expect(extracted.scan.textContentReturned).toBe(false);
+    expect(extracted.verifiedActNumber).toBe("8140");
+    expect(extracted.verifiedActDate?.toISOString().slice(0, 10)).toBe("2026-11-12");
+    expect(extracted.textForReview).toContain("R$ 195,62");
+    expect(extracted.textForReview).toContain("Entra em vigor");
+  });
+
+  it("reutiliza pdfPageCache para múltiplos atos da mesma edição sem segundo download", async () => {
+    const pdf = multiPagePdf([
+      [
+        "DECRETO N. 8.140/2026 - PAGINA 1 DE 1",
+        "DECRETO N. 8.140, DE 12 DE NOVEMBRO DE 2026.",
+        "Art. 1 Conteudo exclusivo do decreto.",
+      ].join("\n"),
+      [
+        "PORTARIA N. 20.323/2026 - PAGINA 1 DE 1",
+        "PORTARIA N. 20.323, DE 12 DE NOVEMBRO DE 2026.",
+        "Art. 1 Conteudo exclusivo da portaria.",
+      ].join("\n"),
+    ]);
+
+    const fetchMock = vi.fn(async () => new Response(pdf, {
+      headers: { "content-type": "application/pdf" },
+    })) as unknown as typeof fetch;
+
+    const cache = new Map<string, CachedEditionPdfPages>();
+    const decree = await extractOfficialPdfActForReview(item, {
+      fetchImpl: fetchMock,
+      pdfPageCache: cache,
+    });
+    const ordinance = await extractOfficialPdfActForReview(
+      {
+        ...item,
+        kind: "Portarias",
+        title: "Portaria N. 20.323 - nomeacao",
+      },
+      {
+        fetchImpl: fetchMock,
+        pdfPageCache: cache,
+      }
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(decree.textForReview).toContain("Conteudo exclusivo do decreto");
+    expect(decree.textForReview).not.toContain("Conteudo exclusivo da portaria");
+    expect(ordinance.textForReview).toContain("Conteudo exclusivo da portaria");
+    expect(ordinance.textForReview).not.toContain("Conteudo exclusivo do decreto");
+    expect(ordinance.scan.segmentCheck?.firstPage).toBe(2);
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, canPublishContent } from "@/lib/auth/session";
 import { gazetteEditionSchema, gazetteActSchema } from "@/lib/validators";
@@ -9,6 +10,40 @@ import {
 import { computeContentHash } from "@/lib/collectors/types";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import { recordAuditLog } from "@/lib/auth/audit";
+
+const AUTO_DRAFT_SUMMARY_PATTERNS = [
+  /^Ementa oficial \(revisão obrigatória\):/i,
+  /^Ato identificado na listagem oficial/i,
+  /^Texto extraído do PDF oficial \(revisão obrigatória\):/i,
+];
+
+const rewriteImportedActSchema = z.object({
+  actId: z.string().min(1, "Ato inválido."),
+  titleSimple: z
+    .string()
+    .trim()
+    .min(5, "O título deve ter pelo menos 5 caracteres.")
+    .max(350, "O título deve ter no máximo 350 caracteres."),
+  objectiveSummary: z
+    .string()
+    .trim()
+    .min(10, "O resumo editorial deve ter pelo menos 10 caracteres.")
+    .max(5000, "O resumo editorial deve ter no máximo 5000 caracteres."),
+  actNumber: z.string().trim().max(40).optional().nullable(),
+  actDate: z
+    .string()
+    .trim()
+    .regex(/^(?:\d{4}-\d{2}-\d{2})?$/, "Data do ato inválida (use AAAA-MM-DD).")
+    .optional()
+    .nullable(),
+  pageNumber: z.preprocess(
+    (v) => (v === undefined ? undefined : v === "" || v === null ? null : v),
+    z.coerce.number().int().min(1).max(500).optional().nullable()
+  ),
+  agencyId: z.string().trim().optional().nullable(),
+  deadlinesText: z.string().trim().max(500).optional().nullable(),
+  saveMode: z.enum(["SAVE_DRAFT", "SEND_TO_REVIEW"]).optional().default("SEND_TO_REVIEW"),
+});
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -27,10 +62,39 @@ export async function GET() {
       take: 60,
     }),
     prisma.gazetteActCategory.findMany({ orderBy: { name: "asc" } }),
-    prisma.publicAgency.findMany({ orderBy: { name: "asc" } }),
+    prisma.publicAgency.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
-  return NextResponse.json({ editions, acts, categories, agencies });
+  const contentHashes = acts
+    .map((a) => a.contentHash)
+    .filter((h): h is string => Boolean(h));
+  const importedDocs =
+    contentHashes.length > 0
+      ? await prisma.importedDocument.findMany({
+          where: { contentHash: { in: contentHashes } },
+          select: { contentHash: true, extractionStatus: true, mimeType: true },
+        })
+      : [];
+  const docByHash = new Map(importedDocs.map((d) => [d.contentHash, d]));
+
+  const enrichedActs = acts.map((act) => {
+    const doc = act.contentHash ? docByHash.get(act.contentHash) : undefined;
+    return {
+      ...act,
+      extractionStatus: doc?.extractionStatus ?? null,
+      mimeType: doc?.mimeType ?? null,
+    };
+  });
+
+  return NextResponse.json({
+    editions,
+    acts: enrichedActs,
+    categories,
+    agencies,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -185,49 +249,166 @@ export async function POST(request: NextRequest) {
       if (!canPublishContent(user.role)) {
         return NextResponse.json({ error: "Sem permissão editorial." }, { status: 403 });
       }
-      const actId = String(body.actId || "");
-      const title = String(body.titleSimple || "").trim();
-      const summary = String(body.objectiveSummary || "").trim();
-      if (title.length < 5 || title.length > 350 || summary.length < 25 || summary.length > 5000) {
+      const parsed = rewriteImportedActSchema.safeParse(body);
+      if (!parsed.success) {
         return NextResponse.json(
-          { error: "Título ou resumo editorial inválido." }, { status: 400 }
-        );
-      }
-      if (
-        /^Ementa oficial \(revisão obrigatória\):/i.test(summary) ||
-        /^Ato identificado na listagem oficial/i.test(summary)
-      ) {
-        return NextResponse.json(
-          { error: "Reescreva e confira o resumo na fonte oficial antes de aprovar." },
+          { error: parsed.error.issues[0]?.message || "Dados de revisão inválidos." },
           { status: 400 }
         );
       }
-      const previous = await prisma.gazetteAct.findUnique({ where: { id: actId } });
-      if (!previous || previous.status !== "DRAFT_IMPORTED") {
+      const d = parsed.data;
+      if (d.saveMode === "SEND_TO_REVIEW") {
+        if (d.objectiveSummary.length < 25) {
+          return NextResponse.json(
+            {
+              error:
+                "Para enviar para IN_REVIEW, o resumo editorial deve ter pelo menos 25 caracteres.",
+            },
+            { status: 400 }
+          );
+        }
+        if (AUTO_DRAFT_SUMMARY_PATTERNS.some((re) => re.test(d.objectiveSummary))) {
+          return NextResponse.json(
+            {
+              error:
+                "Reescreva e confira o resumo na fonte oficial antes de enviar para revisão final.",
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const previous = await prisma.gazetteAct.findUnique({ where: { id: d.actId } });
+      if (
+        !previous ||
+        (previous.status !== "DRAFT_IMPORTED" && previous.status !== "IN_REVIEW")
+      ) {
         return NextResponse.json(
-          { error: "Rascunho importado não encontrado ou já revisado." }, { status: 409 }
+          { error: "Ato em rascunho/revisão não encontrado ou já finalizado." },
+          { status: 409 }
         );
       }
-      const maskedTitle = detectAndMaskPersonalData(title);
-      const maskedSummary = detectAndMaskPersonalData(summary);
-      const updated = await prisma.gazetteAct.update({
-        where: { id: actId },
-        data: {
-          titleSimple: maskedTitle.sanitizedText,
-          objectiveSummary: maskedSummary.sanitizedText,
-          status: "IN_REVIEW",
-          hasPersonalDataAlert:
-            previous.hasPersonalDataAlert ||
-            maskedTitle.hasPersonalData || maskedSummary.hasPersonalData,
-          reviewedById: user.id,
-          reviewedAt: new Date(),
-        },
+
+      let nextAgencyId = previous.agencyId;
+      if (d.agencyId !== undefined) {
+        const cleanAgencyId = d.agencyId ? d.agencyId.trim() : null;
+        if (cleanAgencyId) {
+          const agencyExists = await prisma.publicAgency.findUnique({
+            where: { id: cleanAgencyId },
+            select: { id: true },
+          });
+          if (!agencyExists) {
+            return NextResponse.json(
+              { error: "Órgão público selecionado não existe." },
+              { status: 400 }
+            );
+          }
+          nextAgencyId = cleanAgencyId;
+        } else {
+          nextAgencyId = null;
+        }
+      }
+
+      let nextActDate = previous.actDate;
+      if (d.actDate !== undefined) {
+        if (!d.actDate) {
+          nextActDate = null;
+        } else {
+          const candidateDate = new Date(`${d.actDate}T12:00:00.000Z`);
+          if (
+            Number.isNaN(candidateDate.getTime()) ||
+            candidateDate.toISOString().slice(0, 10) !== d.actDate
+          ) {
+            return NextResponse.json(
+              { error: "Data do ato inválida." },
+              { status: 400 }
+            );
+          }
+          nextActDate = candidateDate;
+        }
+      }
+
+      const nextActNumber =
+        d.actNumber !== undefined
+          ? d.actNumber
+            ? d.actNumber.slice(0, 40)
+            : null
+          : previous.actNumber;
+      const nextPageNumber =
+        d.pageNumber !== undefined ? d.pageNumber : previous.pageNumber;
+
+      const maskedTitle = detectAndMaskPersonalData(d.titleSimple);
+      const maskedSummary = detectAndMaskPersonalData(d.objectiveSummary);
+      const maskedDeadlines =
+        d.deadlinesText !== undefined
+          ? d.deadlinesText
+            ? detectAndMaskPersonalData(d.deadlinesText)
+            : null
+          : undefined;
+
+      const targetStatus =
+        d.saveMode === "SEND_TO_REVIEW" ? "IN_REVIEW" : previous.status;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const act = await tx.gazetteAct.update({
+          where: { id: d.actId },
+          data: {
+            actNumber: nextActNumber,
+            actDate: nextActDate,
+            pageNumber: nextPageNumber,
+            agencyId: nextAgencyId,
+            ...(maskedDeadlines !== undefined
+              ? { deadlinesText: maskedDeadlines?.sanitizedText ?? null }
+              : {}),
+            titleSimple: maskedTitle.sanitizedText,
+            objectiveSummary: maskedSummary.sanitizedText,
+            status: targetStatus,
+            hasPersonalDataAlert:
+              previous.hasPersonalDataAlert ||
+              maskedTitle.hasPersonalData ||
+              maskedSummary.hasPersonalData ||
+              Boolean(maskedDeadlines?.hasPersonalData),
+            reviewedById: user.id,
+            reviewedAt: new Date(),
+          },
+          include: { category: true, edition: true, agency: true },
+        });
+
+        const revCount = await tx.editorialRevision.count({
+          where: { entityType: "GAZETTE_ACT", entityId: d.actId },
+        });
+        await tx.editorialRevision.create({
+          data: {
+            entityType: "GAZETTE_ACT",
+            entityId: d.actId,
+            versionNumber: revCount + 1,
+            snapshotJson: JSON.stringify(act),
+            notes:
+              d.saveMode === "SEND_TO_REVIEW"
+                ? "Revisão editorial concluída; enviado para IN_REVIEW."
+                : "Rascunho editorial salvo mantendo status atual.",
+            status: targetStatus,
+            createdById: user.id,
+          },
+        });
+
+        return act;
       });
+
       await recordAuditLog({
         userId: user.id,
-        action: "GAZETTE_IMPORTED_ACT_REWRITTEN",
+        action:
+          d.saveMode === "SEND_TO_REVIEW"
+            ? "GAZETTE_IMPORTED_ACT_REWRITTEN"
+            : "GAZETTE_IMPORTED_ACT_DRAFT_SAVED",
         entityType: "GazetteAct",
-        entityId: actId,
+        entityId: d.actId,
+        details: {
+          status: targetStatus,
+          actNumber: nextActNumber,
+          pageNumber: nextPageNumber,
+          agencyId: nextAgencyId,
+        },
       });
       return NextResponse.json({ act: updated });
     }

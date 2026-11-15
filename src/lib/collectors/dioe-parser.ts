@@ -161,25 +161,34 @@ const PORTUGUESE_MONTHS: Record<string, number> = {
   julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
 };
 
-function parseActHeader(text: string, kind: OfficialActKind): {
+export interface ParsedOfficialActHeader {
   actDate: Date | null;
-  actNumber: string | null;
-} {
+  actNumber: string;
+}
+
+export function parseOfficialActHeader(
+  text: string,
+  kind: OfficialActKind
+): ParsedOfficialActHeader | null {
   const cleaned = plain(text).slice(0, 1800);
   const kindWord: Record<OfficialActKind, string> = {
     Decretos: "decreto", Leis: "lei", Portarias: "portaria",
   };
-  const match = cleaned.match(/\b(decreto|lei|portaria)\s*(?:n[º°o.]?\s*)?(\d[\d.,]*)\s*,?\s*de\s+(\d{1,2})\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i);
+  const match = cleaned.match(
+    /\b(decreto|lei|portaria)\s*(?:n[\sº°o.]*\s*)?(\d[\d.]*)\s*,?\s*de\s+(\d{1,2})[º°]?\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})\b/i
+  );
   if (!match || match[1] !== kindWord[kind]) {
-    return { actDate: null, actNumber: null };
+    return null;
   }
   const month = PORTUGUESE_MONTHS[match[4]];
   const day = Number(match[3]), year = Number(match[5]);
   const date = new Date(Date.UTC(year, month - 1, day, 12));
   if (year < 2018 || year > 2100 || date.getUTCDate() !== day || date.getUTCMonth() !== month - 1) {
-    return { actDate: null, actNumber: null };
+    return null;
   }
-  return { actDate: date, actNumber: match[2].replace(/\D/g, "") };
+  const actNumber = match[2].replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  if (!actNumber) return null;
+  return { actDate: date, actNumber };
 }
 
 export function parseOfficialActText(
@@ -197,7 +206,7 @@ export function parseOfficialActText(
   // Somente trecho curto para revisão; não gera análise ou inferências.
   const excerpt = text.slice(0, 1700);
   const identity = expected
-    ? parseActHeader(text, expected.kind)
+    ? (parseOfficialActHeader(text, expected.kind) ?? { actDate: null, actNumber: null })
     : { actDate: null, actNumber: null };
   const listingNumber = expected ? extractListingActNumber(expected.listingTitle) : null;
   if (identity.actNumber && listingNumber && identity.actNumber !== listingNumber) {

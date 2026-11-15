@@ -51,10 +51,15 @@ describe("Pré-isolamento conservador de texto do Diário Oficial", () => {
       lastPage: 4,
       pagesConsidered: 3,
       annexMentioned: true,
+      tableLikely: false,
+      verifiedActNumber: "8140",
+      verifiedActDateIso: "2026-11-12",
       textContentReturned: false,
       databaseAccess: false,
       collected: false,
     });
+    expect(result.verifiedActNumber).toBe("8140");
+    expect(result.verifiedActDate?.toISOString().slice(0, 10)).toBe("2026-11-12");
     expect(result.diagnostic.isolatedCharacters).toBeGreaterThan(100);
     expect(result.textForReview).toContain("R$ 195,62");
     expect(result.textForReview).toContain("PLANTA GENÉRICA DE VALORES");
@@ -113,5 +118,38 @@ describe("Pré-isolamento conservador de texto do Diário Oficial", () => {
     );
     const result = prepareOfficialActTextSegment(references, "Decretos", "8140", 2026);
     expect(result.diagnostic.status).toBe("SEGMENT_PREPARED_FOR_REVIEW");
+  });
+
+  it("remove rodapés repetidos de página preservando fecho e detecta tabelas financeiras", () => {
+    const pagesWithFooterAndTable: OfficialPdfPage[] = [
+      {
+        pageNumber: 1,
+        text: [
+          "Decreto nº 8.155/2026 - Página 1 de 1",
+          "DECRETO Nº 8.155, DE 15 DE MARÇO DE 2026.",
+          "Abre crédito adicional suplementar.",
+          "Art. 1º Fica aberto crédito na dotação 02.04.0001 - Natureza da Despesa 3.3.90.30 no valor de R$ 120.000,00.",
+          "Total Geral: R$ 120.000,00.",
+          "Registre-se, publique-se e cumpra-se.",
+          "Diário Oficial Eletrônico - Município de São José do Rio Pardo",
+          "Assinado digitalmente por Autoridade Municipal",
+          "Pág. 1 de 1",
+        ].join("\n"),
+      },
+    ];
+    const result = prepareOfficialActTextSegment(
+      pagesWithFooterAndTable,
+      "Decretos",
+      "8155",
+      2026
+    );
+    expect(result.diagnostic.status).toBe("SEGMENT_PREPARED_FOR_REVIEW");
+    expect(result.diagnostic.tableLikely).toBe(true);
+    expect(result.diagnostic.verifiedActNumber).toBe("8155");
+    expect(result.diagnostic.verifiedActDateIso).toBe("2026-03-15");
+    expect(result.verifiedActDate?.toISOString().slice(0, 10)).toBe("2026-03-15");
+    expect(result.textForReview).toContain("Registre-se, publique-se e cumpra-se.");
+    expect(result.textForReview).not.toContain("Assinado digitalmente por Autoridade Municipal");
+    expect(result.textForReview).not.toContain("Diário Oficial Eletrônico - Município de São José do Rio Pardo");
   });
 });
