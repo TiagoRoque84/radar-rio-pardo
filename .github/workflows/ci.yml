@@ -49,12 +49,14 @@ jobs:
         run: |
           npm run db:use-mysql
           npx prisma generate
-          npx prisma db push
+          npx tsx scripts/init-db-if-needed.ts
           npm run db:seed
           npx vitest run tests/diario-oficial-isolated-import.test.ts tests/database-integration.test.ts tests/pncp-and-csrf-audit.test.ts tests/auth-and-editorial.test.ts
         env:
           DATABASE_URL: mysql://root:testpassword@127.0.0.1:3306/radar_test
           NODE_ENV: test
+          SEED_ADMIN_EMAIL: admin@radarriopardo.com.br
+          SEED_ADMIN_PASSWORD: RioPardoCiTest!2026#Admin
       - name: Verificar TypeScript e build MySQL
         run: |
           npm run db:use-mysql
