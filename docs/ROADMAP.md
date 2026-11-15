@@ -14,11 +14,11 @@
 
 ## FASE 2 — Automação e Conteúdo (BASE IMPLEMENTADA / EXPANSÃO CONTÍNUA)
 
-- [x] Coletor ético inicial da Imprensa Oficial Municipal e coletor real da API do PNCP (IBGE 3549706).
+- [x] Coletor ético inicial da Imprensa Oficial Municipal (incluindo extração limitada e validada de segmentos PDF com sanitização LGPD, detecção de anexos/tabelas e fila de revisão humana `DRAFT_IMPORTED` -> `IN_REVIEW` -> `PUBLISHED`) e coletor real da API do PNCP (IBGE 3549706).
 - [x] Fluxo público e administrativo de solicitações de correção e LGPD (`/correcao` e `/admin/correcoes`).
 - [x] Preparação de postagens e prévia visual para Facebook (`/admin/redes-sociais`).
 - [x] Exportador de dossiê Markdown e prompt seguro para NotebookLM (`/admin/podcasts`).
-- [ ] **Pendência externa:** Integrar extração automatizada de PDF (ex.: `pdf-parse`) após confirmar a estrutura exata dos PDFs publicados pela Imprensa Oficial de SJRP em produção.
+- [ ] **Pendência operacional/externa:** Validar a execução periódica do coletor PDF em produção na Hostinger (incluindo conectividade externa e OCR opcional futuro para eventuais edições digitalizadas sem camada textual ou seções fora de Leis/Decretos/Portarias).
 - [ ] **Pendência externa:** Configurar chave opcional de provedor de IA caso a redação deseje rascunhos automatizados dentro do teto mensal.
 - [ ] **Pendência externa:** Submeter aplicativo na Meta Graph API caso deseje publicação automatizada no Facebook no futuro.
 

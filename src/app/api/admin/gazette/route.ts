@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, canPublishContent } from "@/lib/auth/session";
 import { gazetteEditionSchema, gazetteActSchema } from "@/lib/validators";
@@ -9,6 +10,75 @@ import {
 import { computeContentHash } from "@/lib/collectors/types";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import { recordAuditLog } from "@/lib/auth/audit";
+
+class ConcurrentModificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConcurrentModificationError";
+  }
+}
+
+function isPrismaWriteConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2034"
+  );
+}
+
+const ISO_TIMESTAMP_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseRequiredExpectedUpdatedAt(raw: unknown): Date | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || !ISO_TIMESTAMP_REGEX.test(trimmed)) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+const AUTO_DRAFT_SUMMARY_PATTERNS = [
+  /^Ementa oficial \(revisão obrigatória\):/i,
+  /^Ato identificado na listagem oficial/i,
+  /^Texto extraído do PDF oficial \(revisão obrigatória\):/i,
+];
+
+const rewriteImportedActSchema = z.object({
+  actId: z.string().min(1, "Ato inválido."),
+  titleSimple: z
+    .string()
+    .trim()
+    .min(5, "O título deve ter pelo menos 5 caracteres.")
+    .max(350, "O título deve ter no máximo 350 caracteres."),
+  objectiveSummary: z
+    .string()
+    .trim()
+    .min(10, "O resumo editorial deve ter pelo menos 10 caracteres.")
+    .max(5000, "O resumo editorial deve ter no máximo 5000 caracteres."),
+  actNumber: z.string().trim().max(40).optional().nullable(),
+  actDate: z
+    .string()
+    .trim()
+    .regex(/^(?:\d{4}-\d{2}-\d{2})?$/, "Data do ato inválida (use AAAA-MM-DD).")
+    .optional()
+    .nullable(),
+  pageNumber: z.preprocess(
+    (v) => (v === undefined ? undefined : v === "" || v === null ? null : v),
+    z.coerce.number().int().min(1).max(500).optional().nullable()
+  ),
+  agencyId: z.string().trim().optional().nullable(),
+  deadlinesText: z.string().trim().max(500).optional().nullable(),
+  saveMode: z.enum(["SAVE_DRAFT", "SEND_TO_REVIEW"]).optional().default("SEND_TO_REVIEW"),
+  expectedUpdatedAt: z.custom<string>(
+    (v) => parseRequiredExpectedUpdatedAt(v) !== null,
+    {
+      message:
+        "Versão do registro (expectedUpdatedAt) é obrigatória e deve ser um timestamp ISO válido. Recarregue a página e tente novamente.",
+    }
+  ),
+});
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -27,10 +97,39 @@ export async function GET() {
       take: 60,
     }),
     prisma.gazetteActCategory.findMany({ orderBy: { name: "asc" } }),
-    prisma.publicAgency.findMany({ orderBy: { name: "asc" } }),
+    prisma.publicAgency.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
-  return NextResponse.json({ editions, acts, categories, agencies });
+  const contentHashes = acts
+    .map((a) => a.contentHash)
+    .filter((h): h is string => Boolean(h));
+  const importedDocs =
+    contentHashes.length > 0
+      ? await prisma.importedDocument.findMany({
+          where: { contentHash: { in: contentHashes } },
+          select: { contentHash: true, extractionStatus: true, mimeType: true },
+        })
+      : [];
+  const docByHash = new Map(importedDocs.map((d) => [d.contentHash, d]));
+
+  const enrichedActs = acts.map((act) => {
+    const doc = act.contentHash ? docByHash.get(act.contentHash) : undefined;
+    return {
+      ...act,
+      extractionStatus: doc?.extractionStatus ?? null,
+      mimeType: doc?.mimeType ?? null,
+    };
+  });
+
+  return NextResponse.json({
+    editions,
+    acts: enrichedActs,
+    categories,
+    agencies,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -179,6 +278,208 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result, { status: 201 });
     }
 
+    // Um documento coletado automaticamente não é resumo editorial pronto.
+    // O editor precisa reescrever/conferir o texto antes de liberar publicação.
+    if (body.action === "REWRITE_IMPORTED_ACT") {
+      if (!canPublishContent(user.role)) {
+        return NextResponse.json({ error: "Sem permissão editorial." }, { status: 403 });
+      }
+      const parsed = rewriteImportedActSchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message || "Dados de revisão inválidos." },
+          { status: 400 }
+        );
+      }
+      const d = parsed.data;
+      if (d.saveMode === "SEND_TO_REVIEW") {
+        if (d.objectiveSummary.length < 25) {
+          return NextResponse.json(
+            {
+              error:
+                "Para enviar para IN_REVIEW, o resumo editorial deve ter pelo menos 25 caracteres.",
+            },
+            { status: 400 }
+          );
+        }
+        if (AUTO_DRAFT_SUMMARY_PATTERNS.some((re) => re.test(d.objectiveSummary))) {
+          return NextResponse.json(
+            {
+              error:
+                "Reescreva e confira o resumo na fonte oficial antes de enviar para revisão final.",
+            },
+            { status: 400 }
+          );
+        }
+      }
+
+      const expectedUpdatedDate = parseRequiredExpectedUpdatedAt(d.expectedUpdatedAt)!;
+
+      const previous = await prisma.gazetteAct.findUnique({ where: { id: d.actId } });
+      if (!previous) {
+        return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
+      }
+      if (previous.status !== "DRAFT_IMPORTED" && previous.status !== "IN_REVIEW") {
+        return NextResponse.json(
+          { error: "Apenas atos em rascunho ou em revisão podem receber nova edição por este fluxo." },
+          { status: 409 }
+        );
+      }
+      if (expectedUpdatedDate.getTime() !== previous.updatedAt.getTime()) {
+        return NextResponse.json(
+          {
+            error:
+              "Conflito de edição: este ato foi alterado por outro usuário ou processo. Recarregue a página antes de salvar.",
+          },
+          { status: 409 }
+        );
+      }
+
+      let nextAgencyId = previous.agencyId;
+      if (d.agencyId !== undefined) {
+        const cleanAgencyId = d.agencyId ? d.agencyId.trim() : null;
+        if (cleanAgencyId) {
+          const agencyExists = await prisma.publicAgency.findUnique({
+            where: { id: cleanAgencyId },
+            select: { id: true },
+          });
+          if (!agencyExists) {
+            return NextResponse.json(
+              { error: "Órgão público selecionado não existe." },
+              { status: 400 }
+            );
+          }
+          nextAgencyId = cleanAgencyId;
+        } else {
+          nextAgencyId = null;
+        }
+      }
+
+      let nextActDate = previous.actDate;
+      if (d.actDate !== undefined) {
+        if (!d.actDate) {
+          nextActDate = null;
+        } else {
+          const candidateDate = new Date(`${d.actDate}T12:00:00.000Z`);
+          if (
+            Number.isNaN(candidateDate.getTime()) ||
+            candidateDate.toISOString().slice(0, 10) !== d.actDate
+          ) {
+            return NextResponse.json(
+              { error: "Data do ato inválida." },
+              { status: 400 }
+            );
+          }
+          nextActDate = candidateDate;
+        }
+      }
+
+      const nextActNumber =
+        d.actNumber !== undefined
+          ? d.actNumber
+            ? d.actNumber.slice(0, 40)
+            : null
+          : previous.actNumber;
+      const nextPageNumber =
+        d.pageNumber !== undefined ? d.pageNumber : previous.pageNumber;
+
+      const maskedTitle = detectAndMaskPersonalData(d.titleSimple);
+      const maskedSummary = detectAndMaskPersonalData(d.objectiveSummary);
+      const maskedDeadlines =
+        d.deadlinesText !== undefined
+          ? d.deadlinesText
+            ? detectAndMaskPersonalData(d.deadlinesText)
+            : null
+          : undefined;
+
+      const targetStatus =
+        d.saveMode === "SEND_TO_REVIEW" ? "IN_REVIEW" : previous.status;
+      const hasPersonalDataAlert =
+        previous.hasPersonalDataAlert ||
+        maskedTitle.hasPersonalData ||
+        maskedSummary.hasPersonalData ||
+        Boolean(maskedDeadlines?.hasPersonalData);
+      const nextUpdatedAt = new Date(
+        Math.max(Date.now(), previous.updatedAt.getTime() + 1)
+      );
+      const reviewedAt = new Date();
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.gazetteAct.updateMany({
+          where: {
+            id: d.actId,
+            status: previous.status,
+            updatedAt: expectedUpdatedDate,
+          },
+          data: {
+            actNumber: nextActNumber,
+            actDate: nextActDate,
+            pageNumber: nextPageNumber,
+            agencyId: nextAgencyId,
+            ...(maskedDeadlines !== undefined
+              ? { deadlinesText: maskedDeadlines?.sanitizedText ?? null }
+              : {}),
+            titleSimple: maskedTitle.sanitizedText,
+            objectiveSummary: maskedSummary.sanitizedText,
+            status: targetStatus,
+            hasPersonalDataAlert,
+            reviewedById: user.id,
+            reviewedAt,
+            updatedAt: nextUpdatedAt,
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new ConcurrentModificationError(
+            "Conflito de edição: este ato foi alterado concorrentemente por outro usuário ou processo. Recarregue a página antes de salvar."
+          );
+        }
+
+        const act = await tx.gazetteAct.findUniqueOrThrow({
+          where: { id: d.actId },
+          include: { category: true, edition: true, agency: true },
+        });
+
+        const lastRev = await tx.editorialRevision.findFirst({
+          where: { entityType: "GAZETTE_ACT", entityId: d.actId },
+          orderBy: { versionNumber: "desc" },
+          select: { versionNumber: true },
+        });
+        await tx.editorialRevision.create({
+          data: {
+            entityType: "GAZETTE_ACT",
+            entityId: d.actId,
+            versionNumber: (lastRev?.versionNumber ?? 0) + 1,
+            snapshotJson: JSON.stringify(act),
+            notes:
+              d.saveMode === "SEND_TO_REVIEW"
+                ? "Revisão editorial concluída; enviado para IN_REVIEW."
+                : "Rascunho editorial salvo mantendo status atual.",
+            status: targetStatus,
+            createdById: user.id,
+          },
+        });
+
+        return act;
+      });
+
+      await recordAuditLog({
+        userId: user.id,
+        action:
+          d.saveMode === "SEND_TO_REVIEW"
+            ? "GAZETTE_IMPORTED_ACT_REWRITTEN"
+            : "GAZETTE_IMPORTED_ACT_DRAFT_SAVED",
+        entityType: "GazetteAct",
+        entityId: d.actId,
+        details: {
+          status: targetStatus,
+          actNumber: nextActNumber,
+          pageNumber: nextPageNumber,
+          agencyId: nextAgencyId,
+        },
+      });
+      return NextResponse.json({ act: updated });
+    }
+
     if (body.action === "PUBLISH_ACT" || body.action === "REVIEW_ACT") {
       if (!canPublishContent(user.role)) {
         return NextResponse.json(
@@ -187,25 +488,95 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const actId = String(body.actId || "");
+      const actId = String(body.actId || "").trim();
+      if (!actId) {
+        return NextResponse.json({ error: "Ato inválido." }, { status: 400 });
+      }
+      const expectedUpdatedDate = parseRequiredExpectedUpdatedAt(body.expectedUpdatedAt);
+      if (!expectedUpdatedDate) {
+        return NextResponse.json(
+          {
+            error:
+              "Versão do registro (expectedUpdatedAt) é obrigatória e deve ser um timestamp ISO válido. Recarregue a página antes de continuar.",
+          },
+          { status: 400 }
+        );
+      }
+
       const targetStatus =
         body.action === "PUBLISH_ACT" ? "PUBLISHED" : "IN_REVIEW";
+      const allowedStatuses = ["IN_REVIEW", "APPROVED"];
 
-      const updatedAct = await prisma.gazetteAct.update({
+      const candidate = await prisma.gazetteAct.findUnique({
         where: { id: actId },
-        data: {
-          status: targetStatus,
-          reviewedById: user.id,
-          reviewedAt: new Date(),
-        },
+        select: { id: true, editionId: true, status: true, updatedAt: true },
       });
-
-      if (targetStatus === "PUBLISHED") {
-        await prisma.gazetteEdition.update({
-          where: { id: updatedAct.editionId },
-          data: { status: "PUBLISHED" },
-        });
+      if (!candidate) {
+        return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
       }
+      if (candidate.status === "DRAFT_IMPORTED") {
+        return NextResponse.json(
+          { error: "Este ato importado requer revisão e resumo editorial antes de publicar." },
+          { status: 409 }
+        );
+      }
+      if (!allowedStatuses.includes(candidate.status)) {
+        return NextResponse.json(
+          {
+            error:
+              "Este ato já foi publicado ou não está em status elegível para esta ação. Recarregue a página.",
+          },
+          { status: 409 }
+        );
+      }
+      if (expectedUpdatedDate.getTime() !== candidate.updatedAt.getTime()) {
+        return NextResponse.json(
+          {
+            error:
+              "Conflito de revisão/publicação: este ato foi alterado depois que a tela foi carregada. Recarregue a página antes de continuar.",
+          },
+          { status: 409 }
+        );
+      }
+
+      const nextUpdatedAt = new Date(
+        Math.max(Date.now(), candidate.updatedAt.getTime() + 1)
+      );
+      const reviewedAt = new Date();
+
+      const updatedAct = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.gazetteAct.updateMany({
+          where: {
+            id: actId,
+            status: candidate.status,
+            updatedAt: expectedUpdatedDate,
+          },
+          data: {
+            status: targetStatus,
+            reviewedById: user.id,
+            reviewedAt,
+            updatedAt: nextUpdatedAt,
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new ConcurrentModificationError(
+            "Conflito de revisão/publicação: este ato foi modificado concorrentemente. Recarregue a página antes de tentar novamente."
+          );
+        }
+
+        const act = await tx.gazetteAct.findUniqueOrThrow({
+          where: { id: actId },
+        });
+
+        if (targetStatus === "PUBLISHED") {
+          await tx.gazetteEdition.update({
+            where: { id: act.editionId },
+            data: { status: "PUBLISHED" },
+          });
+        }
+
+        return act;
+      });
 
       await recordAuditLog({
         userId: user.id,
@@ -219,6 +590,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
   } catch (error) {
+    if (error instanceof ConcurrentModificationError || isPrismaWriteConflict(error)) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof ConcurrentModificationError
+              ? error.message
+              : "Conflito de edição concorrente. Recarregue a página antes de tentar novamente.",
+        },
+        { status: 409 }
+      );
+    }
     console.error("Erro na API do Diário Oficial:", error);
     return NextResponse.json(
       {
