@@ -27,6 +27,18 @@ function isPrismaWriteConflict(error: unknown): boolean {
   );
 }
 
+const ISO_TIMESTAMP_REGEX =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseRequiredExpectedUpdatedAt(raw: unknown): Date | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || !ISO_TIMESTAMP_REGEX.test(trimmed)) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 const AUTO_DRAFT_SUMMARY_PATTERNS = [
   /^Ementa oficial \(revisão obrigatória\):/i,
   /^Ato identificado na listagem oficial/i,
@@ -59,16 +71,12 @@ const rewriteImportedActSchema = z.object({
   agencyId: z.string().trim().optional().nullable(),
   deadlinesText: z.string().trim().max(500).optional().nullable(),
   saveMode: z.enum(["SAVE_DRAFT", "SEND_TO_REVIEW"]).optional().default("SEND_TO_REVIEW"),
-  expectedUpdatedAt: z.preprocess(
-    (v) => (v === "" ? null : v),
-    z
-      .string()
-      .trim()
-      .refine((v) => !Number.isNaN(new Date(v).getTime()), {
-        message: "Versão do registro (expectedUpdatedAt) inválida.",
-      })
-      .optional()
-      .nullable()
+  expectedUpdatedAt: z.custom<string>(
+    (v) => parseRequiredExpectedUpdatedAt(v) !== null,
+    {
+      message:
+        "Versão do registro (expectedUpdatedAt) é obrigatória e deve ser um timestamp ISO válido. Recarregue a página e tente novamente.",
+    }
   ),
 });
 
@@ -305,6 +313,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      const expectedUpdatedDate = parseRequiredExpectedUpdatedAt(d.expectedUpdatedAt)!;
+
       const previous = await prisma.gazetteAct.findUnique({ where: { id: d.actId } });
       if (!previous) {
         return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
@@ -315,17 +325,14 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      if (d.expectedUpdatedAt) {
-        const expectedTime = new Date(d.expectedUpdatedAt).getTime();
-        if (expectedTime !== previous.updatedAt.getTime()) {
-          return NextResponse.json(
-            {
-              error:
-                "Conflito de edição: este ato foi alterado por outro usuário ou processo. Recarregue a página antes de salvar.",
-            },
-            { status: 409 }
-          );
-        }
+      if (expectedUpdatedDate.getTime() !== previous.updatedAt.getTime()) {
+        return NextResponse.json(
+          {
+            error:
+              "Conflito de edição: este ato foi alterado por outro usuário ou processo. Recarregue a página antes de salvar.",
+          },
+          { status: 409 }
+        );
       }
 
       let nextAgencyId = previous.agencyId;
@@ -402,7 +409,7 @@ export async function POST(request: NextRequest) {
           where: {
             id: d.actId,
             status: previous.status,
-            updatedAt: previous.updatedAt,
+            updatedAt: expectedUpdatedDate,
           },
           data: {
             actNumber: nextActNumber,
@@ -485,16 +492,15 @@ export async function POST(request: NextRequest) {
       if (!actId) {
         return NextResponse.json({ error: "Ato inválido." }, { status: 400 });
       }
-      let expectedUpdatedDate: Date | null = null;
-      if (typeof body.expectedUpdatedAt === "string" && body.expectedUpdatedAt.trim()) {
-        const parsedExpected = new Date(body.expectedUpdatedAt.trim());
-        if (Number.isNaN(parsedExpected.getTime())) {
-          return NextResponse.json(
-            { error: "Versão do registro (expectedUpdatedAt) inválida." },
-            { status: 400 }
-          );
-        }
-        expectedUpdatedDate = parsedExpected;
+      const expectedUpdatedDate = parseRequiredExpectedUpdatedAt(body.expectedUpdatedAt);
+      if (!expectedUpdatedDate) {
+        return NextResponse.json(
+          {
+            error:
+              "Versão do registro (expectedUpdatedAt) é obrigatória e deve ser um timestamp ISO válido. Recarregue a página antes de continuar.",
+          },
+          { status: 400 }
+        );
       }
 
       const targetStatus =
@@ -523,10 +529,7 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      if (
-        expectedUpdatedDate &&
-        expectedUpdatedDate.getTime() !== candidate.updatedAt.getTime()
-      ) {
+      if (expectedUpdatedDate.getTime() !== candidate.updatedAt.getTime()) {
         return NextResponse.json(
           {
             error:
@@ -546,7 +549,7 @@ export async function POST(request: NextRequest) {
           where: {
             id: actId,
             status: candidate.status,
-            updatedAt: candidate.updatedAt,
+            updatedAt: expectedUpdatedDate,
           },
           data: {
             status: targetStatus,

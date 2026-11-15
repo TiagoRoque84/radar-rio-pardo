@@ -10,6 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: radar_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptestpassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,10 +40,20 @@ jobs:
         env:
           DATABASE_URL: file:./dev.db
           NODE_ENV: test
-      - name: Testes automatizados
+      - name: Testes automatizados (SQLite)
         run: npm test
         env:
           DATABASE_URL: file:./dev.db
+          NODE_ENV: test
+      - name: Preparar e testar fluxo editorial/coletor em MySQL 8.0 de testes
+        run: |
+          npm run db:use-mysql
+          npx prisma generate
+          npx prisma db push
+          npm run db:seed
+          npx vitest run tests/diario-oficial-isolated-import.test.ts tests/database-integration.test.ts tests/pncp-and-csrf-audit.test.ts tests/auth-and-editorial.test.ts
+        env:
+          DATABASE_URL: mysql://root:testpassword@127.0.0.1:3306/radar_test
           NODE_ENV: test
       - name: Verificar TypeScript e build MySQL
         run: |

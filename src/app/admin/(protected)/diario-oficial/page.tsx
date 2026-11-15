@@ -167,6 +167,7 @@ export default function AdminDiarioOficialPage() {
   const [draftAgencyId, setDraftAgencyId] = useState("");
   const [draftDeadlinesText, setDraftDeadlinesText] = useState("");
   const [draftExpectedUpdatedAt, setDraftExpectedUpdatedAt] = useState<string | null>(null);
+  const [draftConflict, setDraftConflict] = useState(false);
 
   async function loadData() {
     const res = await fetch("/api/admin/gazette");
@@ -247,13 +248,21 @@ export default function AdminDiarioOficialPage() {
 
   async function handlePublishAct(actId: string, expectedUpdatedAt?: string) {
     setError("");
+    setFeedback("");
+    const versionToken = expectedUpdatedAt?.trim();
+    if (!versionToken) {
+      setError(
+        "Versão do registro indisponível para publicação. Recarregue a página e tente novamente."
+      );
+      return;
+    }
     const res = await fetch("/api/admin/gazette", {
       method: "POST",
       headers: csrfJsonHeaders(),
       body: JSON.stringify({
         action: "PUBLISH_ACT",
         actId,
-        expectedUpdatedAt: expectedUpdatedAt ?? null,
+        expectedUpdatedAt: versionToken,
       }),
     });
     const data = await res.json();
@@ -290,6 +299,16 @@ export default function AdminDiarioOficialPage() {
   }
 
   function startEditingAct(act: Act) {
+    const versionToken = act.updatedAt?.trim();
+    if (!versionToken) {
+      setError(
+        "Versão do registro indisponível. Recarregue a fila antes de editar este ato."
+      );
+      return;
+    }
+    setError("");
+    setFeedback("");
+    setDraftConflict(false);
     setEditingActId(act.id);
     setDraftTitle(act.titleSimple);
     setDraftSummary(isAutoDraftSummary(act.objectiveSummary) ? "" : act.objectiveSummary);
@@ -298,7 +317,52 @@ export default function AdminDiarioOficialPage() {
     setDraftPageNumber(act.pageNumber ? String(act.pageNumber) : "");
     setDraftAgencyId(act.agencyId || "");
     setDraftDeadlinesText(act.deadlinesText || "");
-    setDraftExpectedUpdatedAt(act.updatedAt ?? null);
+    setDraftExpectedUpdatedAt(versionToken);
+  }
+
+  async function handleReloadVersionKeepingDraft(actId: string) {
+    setError("");
+    setFeedback("");
+    try {
+      const res = await fetch("/api/admin/gazette");
+      if (!res.ok) {
+        setError(
+          "Não foi possível recarregar a versão do ato. Seu texto digitado foi preservado."
+        );
+        return;
+      }
+      const data = await res.json();
+      setEditions(data.editions || []);
+      setActs(data.acts || []);
+      setCategories(data.categories || []);
+      setAgencies(data.agencies || []);
+
+      const refreshedAct = (data.acts as Act[] | undefined)?.find((a) => a.id === actId);
+      if (!refreshedAct || !refreshedAct.updatedAt?.trim()) {
+        setDraftExpectedUpdatedAt(null);
+        setError(
+          "O registro atualizado não foi localizado na fila. Seu texto digitado foi mantido no formulário para cópia."
+        );
+        return;
+      }
+      if (refreshedAct.status !== "DRAFT_IMPORTED" && refreshedAct.status !== "IN_REVIEW") {
+        setDraftExpectedUpdatedAt(refreshedAct.updatedAt);
+        setError(
+          `Este ato já avançou para ${refreshedAct.status} e não aceita nova edição por este formulário. Seu texto digitado foi preservado abaixo para consulta/cópia.`
+        );
+        return;
+      }
+
+      setDraftExpectedUpdatedAt(refreshedAct.updatedAt);
+      setDraftConflict(false);
+      setFeedback(
+        "Versão atualizada recarregada na lista sem apagar o texto digitado no formulário. Confira as alterações atuais do ato acima antes de salvar novamente."
+      );
+    } catch {
+      setError(
+        "Falha ao recarregar os dados do ato. Seu texto digitado foi preservado."
+      );
+    }
   }
 
   async function handleRewriteImportedAct(
@@ -307,6 +371,13 @@ export default function AdminDiarioOficialPage() {
   ) {
     setError("");
     setFeedback("");
+    const versionToken = draftExpectedUpdatedAt?.trim();
+    if (!versionToken) {
+      setError(
+        "Versão do registro indisponível. Recarregue a versão do ato antes de salvar (seu texto digitado foi preservado)."
+      );
+      return;
+    }
     try {
       const res = await fetch("/api/admin/gazette", {
         method: "POST",
@@ -322,16 +393,25 @@ export default function AdminDiarioOficialPage() {
           agencyId: draftAgencyId || null,
           deadlinesText: draftDeadlinesText || null,
           saveMode,
-          expectedUpdatedAt: draftExpectedUpdatedAt,
+          expectedUpdatedAt: versionToken,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Não foi possível salvar a revisão.");
+        if (res.status === 409) {
+          setDraftConflict(true);
+          setError(
+            (data.error || "Conflito de edição detectado.") +
+              " Seu texto digitado foi preservado no formulário para recuperação."
+          );
+        } else {
+          setError(data.error || "Não foi possível salvar a revisão.");
+        }
         return;
       }
       setEditingActId(null);
       setDraftExpectedUpdatedAt(null);
+      setDraftConflict(false);
       setFeedback(
         saveMode === "SEND_TO_REVIEW"
           ? "Revisão editorial salva e ato enviado para IN_REVIEW. Confira antes de publicar."
@@ -339,7 +419,7 @@ export default function AdminDiarioOficialPage() {
       );
       await loadData();
     } catch {
-      setError("Falha na comunicação ao salvar o resumo.");
+      setError("Falha na comunicação ao salvar o resumo. Seu texto digitado foi preservado.");
     }
   }
 
@@ -826,6 +906,21 @@ export default function AdminDiarioOficialPage() {
                         />
                       </div>
 
+                      {error && (
+                        <div className="rounded border border-red-400 bg-red-50 p-2.5 text-xs text-red-900 space-y-2">
+                          <p>{error}</p>
+                          {(draftConflict || !draftExpectedUpdatedAt) && (
+                            <button
+                              type="button"
+                              onClick={() => handleReloadVersionKeepingDraft(act.id)}
+                              className="rounded border border-red-400 bg-white px-2.5 py-1 text-xs font-semibold text-red-900 hover:bg-red-100"
+                            >
+                              Recarregar versão do ato mantendo texto digitado
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -846,6 +941,7 @@ export default function AdminDiarioOficialPage() {
                           onClick={() => {
                             setEditingActId(null);
                             setDraftExpectedUpdatedAt(null);
+                            setDraftConflict(false);
                           }}
                           className="rounded px-3 py-2 text-xs text-radar-muted hover:underline"
                         >

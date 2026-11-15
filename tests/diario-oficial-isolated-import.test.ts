@@ -41,6 +41,7 @@ const allFixtureEditions = [
   "999019",
   "999020",
   "999021",
+  "999022",
 ];
 const pdfUrl = (edition: string, date = "2026-11-12") =>
   `https://dosp.com.br/diario/sp/sao-jose-do-rio-pardo/${date}/ed-${edition}-automated-test.pdf`;
@@ -91,15 +92,18 @@ function minimalTextPdf(pageTextLines: string[]): Uint8Array {
 }
 
 function assertLocalSqliteTestEnv() {
-  if (
-    process.env.DATABASE_URL?.startsWith("mysql://") ||
-    process.env.DATABASE_URL?.startsWith("mysqls://")
-  ) {
-    throw new Error("Teste isolado não pode executar em MySQL.");
+  const url = process.env.DATABASE_URL || "";
+  if (url.startsWith("file:")) return;
+  if (url.startsWith("mysql://") && process.env.NODE_ENV === "test") {
+    const parsed = new URL(url);
+    const isLocalHost =
+      parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+    const isTestDb = parsed.pathname.replace(/^\//, "") === "radar_test";
+    if (isLocalHost && isTestDb) return;
   }
-  if (!process.env.DATABASE_URL?.startsWith("file:")) {
-    throw new Error("DATABASE_URL de testes deve ser SQLite local.");
-  }
+  throw new Error(
+    "DATABASE_URL de testes deve ser SQLite local (file:) ou MySQL local isolado (127.0.0.1/radar_test)."
+  );
 }
 
 const fixture: Record<string, string> = {
@@ -575,8 +579,12 @@ describe("Importação simulada de atos oficiais em banco local", () => {
         })
       );
 
-    // 2. Bloqueia publicação direta de DRAFT_IMPORTED
-    const blockedPublish = await makePost({ action: "PUBLISH_ACT", actId: targetAct!.id });
+    // 2. Bloqueia publicação direta de DRAFT_IMPORTED (mesmo com versão válida)
+    const blockedPublish = await makePost({
+      action: "PUBLISH_ACT",
+      actId: targetAct!.id,
+      expectedUpdatedAt: targetAct!.updatedAt.toISOString(),
+    });
     expect(blockedPublish.status).toBe(409);
 
     // 3. Bloqueia envio para IN_REVIEW mantendo resumo automático do PDF
@@ -587,6 +595,7 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       objectiveSummary:
         "Texto extraído do PDF oficial (revisão obrigatória): Página 1 da Edição nº 999011.",
       saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: targetAct!.updatedAt.toISOString(),
     });
     expect(blockedPlaceholder.status).toBe(400);
 
@@ -601,6 +610,7 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       pageNumber: 2,
       agencyId: agency?.id ?? null,
       saveMode: "SAVE_DRAFT",
+      expectedUpdatedAt: targetAct!.updatedAt.toISOString(),
     });
     expect(draftRes.status).toBe(200);
     const draftJson = await draftRes.json();
@@ -625,6 +635,7 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       agencyId: agency?.id ?? null,
       deadlinesText: "Vigência a partir de 12/11/2026.",
       saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: draftJson.act.updatedAt,
     });
     expect(reviewRes.status).toBe(200);
     const reviewJson = await reviewRes.json();
@@ -642,7 +653,11 @@ describe("Importação simulada de atos oficiais em banco local", () => {
     ).toBe(0);
 
     // 6. Aprovação e publicação final
-    const publishRes = await makePost({ action: "PUBLISH_ACT", actId: targetAct!.id });
+    const publishRes = await makePost({
+      action: "PUBLISH_ACT",
+      actId: targetAct!.id,
+      expectedUpdatedAt: reviewJson.act.updatedAt,
+    });
     expect(publishRes.status).toBe(200);
     expect(
       await prisma.gazetteAct.count({ where: { id: targetAct!.id, status: "PUBLISHED" } })
@@ -946,6 +961,7 @@ describe("Importação simulada de atos oficiais em banco local", () => {
             objectiveSummary:
               "Revisão humana concluída enquanto a coleta finalizava a extração do PDF oficial.",
             saveMode: "SEND_TO_REVIEW",
+            expectedUpdatedAt: act17!.updatedAt.toISOString(),
           });
           expect(res.status).toBe(200);
         }
@@ -958,11 +974,14 @@ describe("Importação simulada de atos oficiais em banco local", () => {
             objectiveSummary:
               "Resumo conferido e publicado antes de a coleta tentar gravar o PDF extraído.",
             saveMode: "SEND_TO_REVIEW",
+            expectedUpdatedAt: act18!.updatedAt.toISOString(),
           });
           expect(reviewRes.status).toBe(200);
+          const reviewJson = await reviewRes.json();
           const publishRes = await makePost({
             action: "PUBLISH_ACT",
             actId: act18!.id,
+            expectedUpdatedAt: reviewJson.act.updatedAt,
           });
           expect(publishRes.status).toBe(200);
         }
@@ -1123,8 +1142,12 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       expectedUpdatedAt: initialVersion,
     });
     expect(saveEditor1.status).toBe(200);
+    const afterEditor1 = await prisma.gazetteAct.findUnique({ where: { id: act19.id } });
+    expect(afterEditor1?.titleSimple).toBe("Decreto 8.159 salvo pelo Editor 1");
+    expect(afterEditor1?.reviewedById).toBe(editor1.id);
+    const versionT1 = afterEditor1!.updatedAt.toISOString();
 
-    // Editor 2 tenta salvar com base na mesma versão T0 defasada
+    // Editor 2 tenta enviar conteúdo antigo OMITINDO expectedUpdatedAt após Editor 1 gerar T1
     mockSessionUser = {
       id: editor2.id,
       name: editor2.name,
@@ -1132,6 +1155,24 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       role: "EDITOR",
       sessionId: "test-session-e2",
     };
+    const omittedVersionEditor2 = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act19.id,
+      titleSimple: "Decreto 8.159 sobrescrita sem versao Editor 2",
+      objectiveSummary: "Tentativa omitindo expectedUpdatedAt deve ser rejeitada com HTTP 400.",
+      saveMode: "SEND_TO_REVIEW",
+    });
+    expect(omittedVersionEditor2.status).toBe(400);
+    const afterOmitted = await prisma.gazetteAct.findUnique({ where: { id: act19.id } });
+    expect(afterOmitted?.titleSimple).toBe("Decreto 8.159 salvo pelo Editor 1");
+    expect(afterOmitted?.updatedAt.toISOString()).toBe(versionT1);
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act19.id },
+      })
+    ).toBe(1);
+
+    // Editor 2 tenta salvar com base na mesma versão T0 defasada -> HTTP 409
     const saveEditor2 = await makePost({
       action: "REWRITE_IMPORTED_ACT",
       actId: act19.id,
@@ -1142,17 +1183,54 @@ describe("Importação simulada de atos oficiais em banco local", () => {
     });
     expect(saveEditor2.status).toBe(409);
 
-    // Também garante conflito em execução paralela simultânea na versão atual T1
-    const afterEditor1 = await prisma.gazetteAct.findUnique({ where: { id: act19.id } });
-    expect(afterEditor1?.titleSimple).toBe("Decreto 8.159 salvo pelo Editor 1");
-    expect(afterEditor1?.reviewedById).toBe(editor1.id);
+    // Valores inválidos de expectedUpdatedAt são rejeitados (HTTP 400) em REWRITE_IMPORTED_ACT, REVIEW_ACT e PUBLISH_ACT
+    const invalidVersions: unknown[] = [
+      undefined,
+      null,
+      "",
+      "   ",
+      12345,
+      { iso: versionT1 },
+      "data-invalida",
+      "2026-11-12",
+    ];
+    for (const invalidVer of invalidVersions) {
+      const invalidRewrite = await makePost({
+        action: "REWRITE_IMPORTED_ACT",
+        actId: act19.id,
+        titleSimple: "Decreto 8.159 tentativa versao invalida",
+        objectiveSummary: "Não pode salvar com expectedUpdatedAt ausente ou malformado.",
+        saveMode: "SEND_TO_REVIEW",
+        ...(invalidVer !== undefined ? { expectedUpdatedAt: invalidVer } : {}),
+      });
+      expect(invalidRewrite.status).toBe(400);
+
+      const invalidReview = await makePost({
+        action: "REVIEW_ACT",
+        actId: act19.id,
+        ...(invalidVer !== undefined ? { expectedUpdatedAt: invalidVer } : {}),
+      });
+      expect(invalidReview.status).toBe(400);
+
+      const invalidPublish = await makePost({
+        action: "PUBLISH_ACT",
+        actId: act19.id,
+        ...(invalidVer !== undefined ? { expectedUpdatedAt: invalidVer } : {}),
+      });
+      expect(invalidPublish.status).toBe(400);
+    }
+
+    // Nenhuma alteração ou revisão espúria após rejeições de versão inválida/omitida
+    const afterInvalids = await prisma.gazetteAct.findUnique({ where: { id: act19.id } });
+    expect(afterInvalids?.titleSimple).toBe("Decreto 8.159 salvo pelo Editor 1");
+    expect(afterInvalids?.status).toBe("IN_REVIEW");
     expect(
       await prisma.editorialRevision.count({
         where: { entityType: "GAZETTE_ACT", entityId: act19.id },
       })
     ).toBe(1);
 
-    const versionT1 = afterEditor1!.updatedAt.toISOString();
+    // Também garante conflito em execução paralela simultânea na versão atual T1
     const [raceA, raceB] = await Promise.all([
       makePost({
         action: "REWRITE_IMPORTED_ACT",
@@ -1188,9 +1266,10 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       expectedUpdatedAt: revBeforePublish,
     });
     expect(publishRes.status).toBe(200);
+    const publishJson = await publishRes.json();
 
-    // Tentativa de REWRITE_IMPORTED_ACT (com SAVE_DRAFT ou SEND_TO_REVIEW, com ou sem expectedUpdatedAt)
-    // em ato já PUBLISHED é bloqueada com HTTP 409 e nunca altera conteúdo ou status.
+    // Tentativa de REWRITE_IMPORTED_ACT (com SAVE_DRAFT ou SEND_TO_REVIEW) em ato já PUBLISHED
+    // é bloqueada com HTTP 409 (mesmo informando a versão atual ou defasada) e nunca altera conteúdo ou status.
     const lateSaveDraft = await makePost({
       action: "REWRITE_IMPORTED_ACT",
       actId: act20.id,
@@ -1201,19 +1280,21 @@ describe("Importação simulada de atos oficiais em banco local", () => {
     });
     expect(lateSaveDraft.status).toBe(409);
 
-    const lateSendReviewNoVersion = await makePost({
+    const lateSendReviewCurrentVer = await makePost({
       action: "REWRITE_IMPORTED_ACT",
       actId: act20.id,
-      titleSimple: "Tentativa de alterar ato publicado sem versionamento",
-      objectiveSummary: "Mesmo sem expectedUpdatedAt, não pode sobrescrever PUBLISHED.",
+      titleSimple: "Tentativa de alterar ato publicado com versao atual",
+      objectiveSummary: "Mesmo com expectedUpdatedAt atual, não pode sobrescrever PUBLISHED.",
       saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: publishJson.act.updatedAt,
     });
-    expect(lateSendReviewNoVersion.status).toBe(409);
+    expect(lateSendReviewCurrentVer.status).toBe(409);
 
-    // Tentativa de REVIEW_ACT para regredir PUBLISHED -> IN_REVIEW também retorna 409
+    // Tentativa de REVIEW_ACT para regredir PUBLISHED -> IN_REVIEW com versão atual também retorna 409
     const regressReviewRes = await makePost({
       action: "REVIEW_ACT",
       actId: act20.id,
+      expectedUpdatedAt: publishJson.act.updatedAt,
     });
     expect(regressReviewRes.status).toBe(409);
 
@@ -1269,5 +1350,86 @@ describe("Importação simulada de atos oficiais em banco local", () => {
         })
       ).toBe(1);
     }
+
+    // 4. PUBLISH_ACT e REVIEW_ACT com versão válida porém desatualizada (999022) -> HTTP 409 sem mutação
+    const ed22 = await prisma.gazetteEdition.create({
+      data: {
+        editionNumber: "999022",
+        publicationDate: new Date("2026-11-12T12:00:00.000Z"),
+        year: 2026,
+        month: 11,
+        officialUrl: pdfUrl("999022"),
+        status: "PENDING_REVIEW",
+      },
+    });
+    const act22 = await prisma.gazetteAct.create({
+      data: {
+        editionId: ed22.id,
+        categoryId: category!.id,
+        titleSimple: "Decreto 8.162 versão T0",
+        objectiveSummary: "Resumo inicial em revisão para testar publicação com versão defasada.",
+        officialUrl: pdfUrl("999022"),
+        contentHash: `test-hash-999022-${suffix}`,
+        status: "IN_REVIEW",
+        reviewedById: editor1.id,
+        reviewedAt: new Date(),
+      },
+    });
+    touchedActIds.push(act22.id);
+
+    const t0Act22 = act22.updatedAt.toISOString();
+    const editT1Res = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act22.id,
+      titleSimple: "Decreto 8.162 versão T1 atualizada",
+      objectiveSummary: "Resumo alterado em IN_REVIEW após a leitura T0 do publicador.",
+      saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: t0Act22,
+    });
+    expect(editT1Res.status).toBe(200);
+    const editT1Json = await editT1Res.json();
+    const t1Act22 = editT1Json.act.updatedAt;
+
+    const stalePublish = await makePost({
+      action: "PUBLISH_ACT",
+      actId: act22.id,
+      expectedUpdatedAt: t0Act22,
+    });
+    expect(stalePublish.status).toBe(409);
+
+    const staleReview = await makePost({
+      action: "REVIEW_ACT",
+      actId: act22.id,
+      expectedUpdatedAt: t0Act22,
+    });
+    expect(staleReview.status).toBe(409);
+
+    const act22StillReview = await prisma.gazetteAct.findUnique({ where: { id: act22.id } });
+    const ed22StillPending = await prisma.gazetteEdition.findUnique({ where: { id: ed22.id } });
+    expect(act22StillReview?.status).toBe("IN_REVIEW");
+    expect(act22StillReview?.titleSimple).toBe("Decreto 8.162 versão T1 atualizada");
+    expect(ed22StillPending?.status).toBe("PENDING_REVIEW");
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act22.id },
+      })
+    ).toBe(1);
+
+    // Com a versão T1 atualizada, a publicação é concluída com sucesso
+    const freshPublish = await makePost({
+      action: "PUBLISH_ACT",
+      actId: act22.id,
+      expectedUpdatedAt: t1Act22,
+    });
+    expect(freshPublish.status).toBe(200);
+    const act22Published = await prisma.gazetteAct.findUnique({ where: { id: act22.id } });
+    const ed22Published = await prisma.gazetteEdition.findUnique({ where: { id: ed22.id } });
+    expect(act22Published?.status).toBe("PUBLISHED");
+    expect(ed22Published?.status).toBe("PUBLISHED");
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act22.id },
+      })
+    ).toBe(1);
   }, 15_000);
 });
