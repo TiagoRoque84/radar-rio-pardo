@@ -54,10 +54,23 @@ genérico que aceite qualquer link da página inicial.
     (`METADATA_ONLY_NO_TEXT_LAYER`, `METADATA_ONLY_INCOMPLETE_MARKERS`, `METADATA_ONLY_MIXED_TEXT`,
     `METADATA_ONLY_PDF_TOO_LARGE`, `METADATA_ONLY_HTTP_ERROR`, `METADATA_ONLY_ACT_NOT_FOUND`,
     `METADATA_ONLY_PARSE_ERROR`, `METADATA_ONLY`).
-  - **Atualização segura de rascunhos sem duplicação:** rascunhos previamente gravados como
-    `METADATA_ONLY*` que ainda estejam em `DRAFT_IMPORTED` são atualizados em transação
-    quando o texto verificado se torna disponível; atos que já avançaram para `IN_REVIEW`,
-    `APPROVED` ou `PUBLISHED` nunca são sobrescritos.
+  - **Atualização segura de rascunhos sem duplicação e preservação de trabalho humano:**
+    rascunhos previamente gravados como `METADATA_ONLY*` que ainda estejam em `DRAFT_IMPORTED`
+    e **sem edição humana** (`reviewedById === null && reviewedAt === null`) são atualizados em
+    transação quando o texto verificado se torna disponível. Rascunhos em `DRAFT_IMPORTED` que
+    já passaram por salvamento manual (`SAVE_DRAFT`) têm seus campos editoriais (`titleSimple`,
+    `objectiveSummary`, `actNumber`, `actDate`, `pageNumber`, `agencyId`, `deadlinesText`)
+    integralmente preservados; quando possível, a coleta enriquece apenas o texto de origem em
+    `ImportedDocument` (`rawText`, `extractionStatus`), `rawExcerpt` (se ainda vazio) e o alerta LGPD.
+    Atos que já avançaram para `IN_REVIEW`, `APPROVED` ou `PUBLISHED` nunca são sobrescritos.
+  - **Controle de concorrência entre coleta, edição, revisão e publicação:** todas as escritas do
+    coletor (`imprensa-oficial-collector.ts`) e dos fluxos editoriais (`/api/admin/gazette`:
+    `REWRITE_IMPORTED_ACT`, `REVIEW_ACT` e `PUBLISH_ACT`) usam atualização condicional atômica
+    dentro de `prisma.$transaction` verificando status, autoria de revisão e `updatedAt` (e
+    `expectedUpdatedAt` enviado pelo painel quando aplicável). Conflitos editoriais devolvem HTTP
+    `409` orientando recarregar a página sem gravar `EditorialRevision` órfã e sem permitir regressão
+    de status (ex.: `PUBLISHED` → `IN_REVIEW`/`DRAFT_IMPORTED`); conflitos durante a coleta fazem
+    rollback completo e registram no log da execução que a atualização concorrente foi ignorada.
 - **Revisão no painel `/admin/diario-oficial`:** os metadados entram em `GazetteEdition` e
   `ImportedDocument`, e cada ato é criado em `GazetteAct` com status `DRAFT_IMPORTED` (nunca
   publicado automaticamente). O editor visualiza o texto extraído sanitizado em área própria,
@@ -71,52 +84,18 @@ genérico que aceite qualquer link da página inicial.
   oficial. O coletor não atribui automaticamente os atos à Prefeitura,
   pois podem incluir atos do Legislativo. Número de ato é confrontado com
   o cabeçalho do texto antes de aceitar o trecho como verificado.
-- **Inspeção sem gravação:** o endpoint temporário do preview
-  `/api/diagnostics/diario-source?kind=Decretos&inspect=1`
-  mostra até 3 atos com título sanitizado, edição, data de publicação e
-  links oficiais; confere o cabeçalho de **um único texto** disponível,
-  sem conexão com o banco. Excluir esta rota antes de integrar à `main`.
-- **Prova de acesso ao PDF (somente leitura):** a prévia aceita
-  `/api/diagnostics/diario-source?kind=Decretos&inspect=1&pdf=1`.
-  O diagnóstico verifica **um** PDF de edição, dando prioridade ao ato que
-  não possui link HTML individual. Confere município, número/data na URL,
-  HTTPS, domínio, resposta HTTP e cabeçalho `%PDF-`; baixa só os
-  primeiros bytes e cancela a transferência. A resposta inclui
-  `pdfCheck.status=PDF_HEADER_VERIFIED` quando a assinatura é encontrada.
-  **Isso não significa que o conteúdo do PDF foi extraído ou autenticado.**
-- **Experimento de camada textual por página:** a consulta exclusiva da prévia
-  `/api/diagnostics/diario-source?kind=Decretos&inspect=1&pdf=2`
-  utiliza `pdf-parse@2.4.5` apenas no Node.js, lê no máximo 12 MB do PDF,
-  limita o documento a 30 páginas e examina até 8 páginas iniciais. Devolve
-  número da edição, total de páginas, páginas candidatas ao cabeçalho do ato
-  e status técnico — **jamais devolve o texto extraído**. Em caso de
-  tamanho excessivo, informa o limite e a quantidade declarada ou efetivamente
-  lida, sem remover os limites de segurança. Uma ocorrência do
-  número não comprova que o ato inteiro foi extraído, nem gera um resumo
-  ou a publicação de qualquer conteúdo. Documentos escaneados sem camada
-  textual precisam de verificação manual e eventual OCR separado.
-- **Conferência da extensão do ato por marcadores do próprio PDF:** no
-  diagnóstico temporário `pdf=3`, o leitor procura a identificação
-  explícita da mesma numeração de ato/ano e a sequência impressa
-  `Página 1 de N`, `Página 2 de N` etc. Só retorna
-  `PAGE_MARKERS_COMPLETE` quando todos os marcadores estão presentes
-  em páginas consecutivas. O escopo é **PAGE_LEVEL_ONLY**: ainda pode
-  haver texto de outros atos na mesma página, e nenhum trecho é publicado,
-  devolvido ao usuário ou gravado em banco nesta etapa. Os limites do
-  `pdf=2` (12 MB, 30 páginas, máximo 8 páginas examinadas) continuam
-  vigentes. Não publicar notícia somente com base nos marcadores.
-- **Preparação conservadora do texto para revisão:** com `pdf=4`, a prévia
-  confirma os marcadores completos de início e fim, exige o marcador do
-  documento em linha separada em cada página e o cabeçalho correspondente
-  do ato na primeira página. Rejeita cabeçalhos de outros atos ou sequências
-  incompletas. O leitor prepara uma **candidatura em memória** para revisão,
-  mas o endpoint responde somente `segmentCheck` (status, páginas, quantidade
-  de caracteres, presença de anexo); **jamais devolve o texto original**,
-  não persiste nada e não o publica. `SEGMENT_PREPARED_FOR_REVIEW` não é
-  certificação de integridade jurídica ou editorial; antes de salvar um
-  rascunho é necessário sanitizar, apresentar a fonte e permitir conferência
-  humana, inclusive de tabelas e rodapés. Esta etapa não cobre páginas
-  mistas ou PDFs com ordenação textual sem linhas separadas.
+- **Inspeção e leitura conservadora do PDF oficial (bibliotecas internas do coletor):**
+  - `probeOfficialEditionPdf` (`dioe-pdf-probe.ts`): confere município, número/data na URL,
+    HTTPS, domínio, resposta HTTP e cabeçalho `%PDF-`, baixando apenas os primeiros bytes.
+    **Isso não significa que o conteúdo do PDF foi extraído ou autenticado.**
+  - `scanOfficialPdfForAct` (`dioe-pdf-text.ts`): utiliza `pdf-parse@2.4.5` apenas no Node.js,
+    lê no máximo 12 MB do PDF, limita o documento a 30 páginas e examina até 8 páginas iniciais.
+    Procura marcadores consecutivos (`Página 1 de N`, `Página 2 de N` etc. em linhas separadas),
+    exige cabeçalho compatível do ato na primeira página e rejeita trechos que contenham outro
+    ato misturado (`OTHER_ACT_DETECTED`). `SEGMENT_PREPARED_FOR_REVIEW` não é certificação de
+    integridade jurídica ou editorial: serve apenas para apoiar a conferência humana na fila
+    autenticada `/admin/diario-oficial`, inclusive de tabelas, anexos e rodapés. Esta etapa não
+    cobre páginas mistas, PDFs escaneados sem camada textual (OCR) ou ordenação sem linhas separadas.
 - **LGPD:** campos de título, resumo e trecho passam pelo sanitizador existente;
   a coleta não tenta copiar PDFs inteiros nem inventar valores e consequências.
 - **Limite de cobertura:** não considera a extração dos PDFs integrais pronta.
@@ -125,12 +104,15 @@ genérico que aceite qualquer link da página inicial.
 - **Acesso externo:** o teste somente leitura em GitHub Actions retornou HTTP 403
   no endpoint `/listaatos.php` em 14/11/2026. Não há tentativa de contornar
   restrições do fornecedor. A conectividade específica precisa ser verificada
-  na Hostinger antes de autorizar o deploy/uso deste coletor.
-- **Teste diagnóstico opcional:** `npx tsx scripts/verify-dioe-live.ts` executa
-  uma única consulta GET sem usar banco de dados. Falha explicitamente se
-  a fonte bloquear a requisição.
+  no ambiente da Hostinger antes de autorizar a operação contínua em produção.
+- **Validação controlada sem endpoint público:** a rota temporária de diagnóstico
+  `/api/diagnostics/diario-source` foi removida. Para conferir conectividade, cabeçalho HTML e
+  sonda/segmentação de PDF diretamente no ambiente autorizado sem tocar no banco de dados e sem
+  imprimir o texto integral, utilize o script CLI `npx tsx scripts/verify-dioe-live.ts` (ou
+  `npx tsx scripts/verify-dioe-live.ts --pdf`) e confirme o resultado das execuções reais no
+  painel autenticado `/admin/diario-oficial`.
 - **Comprovação operacional:** os testes automatizados são baseados em fixtures;
-  antes da integração em produção, conferir uma coleta real na Hostinger e comparar
+  antes da integração em produção, conferir uma coleta real no ambiente da Hostinger e comparar
   alguns documentos com os registros oficiais.
 
 Referência de consulta estruturada:

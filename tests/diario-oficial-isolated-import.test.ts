@@ -1,7 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { runImprensaOficialCollector } from "@/lib/collectors/imprensa-oficial-collector";
+import {
+  runImprensaOficialCollector,
+  type ImprensaOficialCollectorOptions,
+} from "@/lib/collectors/imprensa-oficial-collector";
 
 let mockSessionUser: {
   id: string;
@@ -31,6 +34,13 @@ const allFixtureEditions = [
   "999012",
   "999013",
   "999014",
+  "999015",
+  "999016",
+  "999017",
+  "999018",
+  "999019",
+  "999020",
+  "999021",
 ];
 const pdfUrl = (edition: string, date = "2026-11-12") =>
   `https://dosp.com.br/diario/sp/sao-jose-do-rio-pardo/${date}/ed-${edition}-automated-test.pdf`;
@@ -150,6 +160,12 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       });
     }
     if (createdUserIds.length) {
+      await prisma.editorialRevision.deleteMany({
+        where: { createdById: { in: createdUserIds } },
+      });
+      await prisma.auditLog.deleteMany({
+        where: { userId: { in: createdUserIds } },
+      });
       await prisma.user.deleteMany({
         where: { id: { in: createdUserIds } },
       });
@@ -168,7 +184,7 @@ describe("Importação simulada de atos oficiais em banco local", () => {
     await prisma.$disconnect();
   });
 
-  async function runWithMockedCollector() {
+  async function runWithMockedCollector(options?: ImprensaOficialCollectorOptions) {
     const adapter = await prisma.integrationAdapter.findUnique({
       where: { adapterKey: "imprensa-oficial-sjrp" },
       include: { source: true },
@@ -178,14 +194,17 @@ describe("Importação simulada de atos oficiais em banco local", () => {
       data: { adapterId: adapter!.id, status: "RUNNING", triggerType: "MANUAL" },
     });
     runIds.push(run.id);
-    return runImprensaOficialCollector({
-      adapterId: adapter!.id,
-      adapterKey: adapter!.adapterKey,
-      sourceId: adapter!.sourceId,
-      sourceUrl: adapter!.source.url,
-      agencyId: adapter!.source.agencyId,
-      runId: run.id,
-    });
+    return runImprensaOficialCollector(
+      {
+        adapterId: adapter!.id,
+        adapterKey: adapter!.adapterKey,
+        sourceId: adapter!.sourceId,
+        sourceUrl: adapter!.source.url,
+        agencyId: adapter!.source.agencyId,
+        runId: run.id,
+      },
+      options
+    );
   }
 
   it("cria rascunhos com data/órgão verificados, sem publicar, e deduplica na reexecução", async () => {
@@ -628,5 +647,627 @@ describe("Importação simulada de atos oficiais em banco local", () => {
     expect(
       await prisma.gazetteAct.count({ where: { id: targetAct!.id, status: "PUBLISHED" } })
     ).toBe(1);
+  }, 15_000);
+
+  it("preserva rascunho editado via SAVE_DRAFT quando coleta posterior extrai PDF e continua enriquecendo rascunho intacto", async () => {
+    assertLocalSqliteTestEnv();
+
+    let editor = await prisma.user.findFirst({
+      where: { role: "EDITOR", active: true },
+    });
+    if (!editor) {
+      editor = await prisma.user.create({
+        data: {
+          name: "Editor Preservacao Draft",
+          email: "editor-preservacao@radarriopardo.local",
+          passwordHash: "hash-nao-usado-em-teste",
+          role: "EDITOR",
+          active: true,
+        },
+      });
+      createdUserIds.push(editor.id);
+    }
+    mockSessionUser = {
+      id: editor.id,
+      name: editor.name,
+      email: editor.email,
+      role: "EDITOR",
+      sessionId: "test-session-preservacao",
+    };
+
+    const agency = await prisma.publicAgency.findFirst({ where: { active: true } });
+    let pdfAvailable = false;
+
+    const pdf999015 = minimalTextPdf([
+      "Decreto n. 8.155/2026 - Pagina 1 de 1",
+      "DECRETO N. 8.155, DE 12 DE NOVEMBRO DE 2026.",
+      "Art. 1 Conteudo oficial extraido com CPF 999.888.777-66 para conferencia.",
+    ]);
+    const pdf999016 = minimalTextPdf([
+      "Decreto n. 8.156/2026 - Pagina 1 de 1",
+      "DECRETO N. 8.156, DE 12 DE NOVEMBRO DE 2026.",
+      "Art. 1 Conteudo oficial de rascunho automatico sem edicao humana.",
+    ]);
+
+    const decreesHtml =
+      "<html><body><h1>Diário Oficial - São José do Rio Pardo</h1><h2>Listar Atos</h2><table>" +
+      '<tr><td>8155.2026 - Decreto editado em SAVE_DRAFT</td><td>12/11/2026</td><td>999015</td><td>9</td><td><a href="' +
+      pdfUrl("999015") + '">Abrir</a></td><td>-</td></tr>' +
+      '<tr><td>8156.2026 - Decreto automatico intacto</td><td>12/11/2026</td><td>999016</td><td>9</td><td><a href="' +
+      pdfUrl("999016") + '">Abrir</a></td><td>-</td></tr>' +
+      "</table></body></html>";
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const target = new URL(String(url));
+      if (target.pathname === "/listaatos.php") {
+        const s = target.searchParams.get("s");
+        if (s === "Decretos") return new Response(decreesHtml, { headers: { "content-type": "text/html" } });
+        if (s === "Leis") {
+          return new Response(
+            listing("Lei 7015 - auxiliar", "999015", "https://www.dosp.com.br/leituratexto?p=AUX15"),
+            { headers: { "content-type": "text/html" } }
+          );
+        }
+        if (s === "Portarias") {
+          return new Response(
+            listing("Portaria 20345 - auxiliar", "999015", "https://www.dosp.com.br/leituratexto?p=AUX16"),
+            { headers: { "content-type": "text/html" } }
+          );
+        }
+      }
+      if (target.pathname === "/leituratexto") {
+        return new Response(
+          "<html><body><h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1><p>Publicado em 12/11/2026</p></body></html>",
+          { headers: { "content-type": "text/html" } }
+        );
+      }
+      if (!pdfAvailable) {
+        return new Response("Indisponivel", { status: 503 });
+      }
+      if (target.pathname.includes("ed-999015-")) {
+        return new Response(pdf999015, { headers: { "content-type": "application/pdf" } });
+      }
+      if (target.pathname.includes("ed-999016-")) {
+        return new Response(pdf999016, { headers: { "content-type": "application/pdf" } });
+      }
+      throw new Error(`URL inesperada: ${target.toString()}`);
+    }));
+
+    // 1ª coleta: ambos entram como METADATA_ONLY_HTTP_ERROR em DRAFT_IMPORTED
+    await runWithMockedCollector();
+    const act15 = await prisma.gazetteAct.findFirst({
+      where: { edition: { editionNumber: "999015", year: 2026 }, category: { slug: "decretos" } },
+    });
+    const act16 = await prisma.gazetteAct.findFirst({
+      where: { edition: { editionNumber: "999016", year: 2026 }, category: { slug: "decretos" } },
+    });
+    expect(act15).not.toBeNull();
+    expect(act16).not.toBeNull();
+    touchedActIds.push(act15!.id, act16!.id);
+    expect(act15!.reviewedById).toBeNull();
+    expect(act15!.reviewedAt).toBeNull();
+
+    // Edição humana via SAVE_DRAFT apenas em 999015
+    const { POST } = await import("@/app/api/admin/gazette/route");
+    const saveDraftRes = await POST(
+      new NextRequest("http://localhost:3000/api/admin/gazette", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "REWRITE_IMPORTED_ACT",
+          actId: act15!.id,
+          titleSimple: "Decreto 8.155 editado manualmente pelo editor",
+          objectiveSummary: "Rascunho humano confirmado aguardando texto oficial.",
+          actNumber: "8155-REV",
+          actDate: "2026-11-10",
+          pageNumber: 3,
+          agencyId: agency?.id ?? null,
+          deadlinesText: "Prazo confirmado manualmente: 30 dias.",
+          saveMode: "SAVE_DRAFT",
+          expectedUpdatedAt: act15!.updatedAt.toISOString(),
+        }),
+      })
+    );
+    expect(saveDraftRes.status).toBe(200);
+    const saved15 = await prisma.gazetteAct.findUnique({ where: { id: act15!.id } });
+    expect(saved15?.status).toBe("DRAFT_IMPORTED");
+    expect(saved15?.reviewedById).toBe(editor.id);
+    expect(saved15?.reviewedAt).not.toBeNull();
+
+    // 2ª coleta: PDFs passam a estar disponíveis
+    pdfAvailable = true;
+    const secondRun = await runWithMockedCollector();
+    expect(secondRun.errorCount).toBe(0);
+
+    // 999015 preservou todos os campos editoriais salvos em SAVE_DRAFT e enriqueceu apenas o texto de origem
+    expect(
+      await prisma.gazetteAct.count({
+        where: { edition: { editionNumber: "999015", year: 2026 }, category: { slug: "decretos" } },
+      })
+    ).toBe(1);
+    const after15 = await prisma.gazetteAct.findUnique({ where: { id: act15!.id } });
+    const doc15 = await prisma.importedDocument.findUnique({
+      where: { contentHash: act15!.contentHash },
+    });
+    expect(after15?.status).toBe("DRAFT_IMPORTED");
+    expect(after15?.titleSimple).toBe("Decreto 8.155 editado manualmente pelo editor");
+    expect(after15?.objectiveSummary).toBe(
+      "Rascunho humano confirmado aguardando texto oficial."
+    );
+    expect(after15?.actNumber).toBe("8155-REV");
+    expect(after15?.actDate?.toISOString().slice(0, 10)).toBe("2026-11-10");
+    expect(after15?.pageNumber).toBe(3);
+    expect(after15?.agencyId).toBe(agency?.id ?? null);
+    expect(after15?.deadlinesText).toBe("Prazo confirmado manualmente: 30 dias.");
+    expect(after15?.reviewedById).toBe(editor.id);
+    expect(after15?.rawExcerpt).toContain("Conteudo oficial extraido");
+    expect(after15?.rawExcerpt).not.toContain("999.888.777-66");
+    expect(after15?.hasPersonalDataAlert).toBe(true);
+    expect(doc15?.extractionStatus).toBe("EXTRACTED_PDF_FOR_REVIEW");
+    expect(doc15?.rawText).toContain("Conteudo oficial extraido");
+    expect(doc15?.rawText).not.toContain("999.888.777-66");
+
+    // 999016 (intacto, sem edição humana) foi normalmente enriquecido no mesmo registro
+    expect(
+      await prisma.gazetteAct.count({
+        where: { edition: { editionNumber: "999016", year: 2026 }, category: { slug: "decretos" } },
+      })
+    ).toBe(1);
+    const after16 = await prisma.gazetteAct.findUnique({ where: { id: act16!.id } });
+    const doc16 = await prisma.importedDocument.findUnique({
+      where: { contentHash: act16!.contentHash },
+    });
+    expect(after16?.status).toBe("DRAFT_IMPORTED");
+    expect(after16?.pageNumber).toBe(1);
+    expect(after16?.actNumber).toBe("8156");
+    expect(after16?.actDate?.toISOString().slice(0, 10)).toBe("2026-11-12");
+    expect(after16?.objectiveSummary).toMatch(/^Texto extraído do PDF oficial \(revisão obrigatória\):/);
+    expect(after16?.rawExcerpt).toContain("rascunho automatico sem edicao humana");
+    expect(doc16?.extractionStatus).toBe("EXTRACTED_PDF_FOR_REVIEW");
+  }, 15_000);
+
+  it("descarta com rollback atômico a atualização da coleta se ocorrer revisão ou publicação concorrente após a extração", async () => {
+    assertLocalSqliteTestEnv();
+
+    let editor = await prisma.user.findFirst({
+      where: { role: "EDITOR", active: true },
+    });
+    if (!editor) {
+      editor = await prisma.user.create({
+        data: {
+          name: "Editor Concorrencia Coleta",
+          email: "editor-concorrencia-coleta@radarriopardo.local",
+          passwordHash: "hash-nao-usado-em-teste",
+          role: "EDITOR",
+          active: true,
+        },
+      });
+      createdUserIds.push(editor.id);
+    }
+    mockSessionUser = {
+      id: editor.id,
+      name: editor.name,
+      email: editor.email,
+      role: "EDITOR",
+      sessionId: "test-session-coleta-race",
+    };
+
+    let pdfAvailable = false;
+    const pdf999017 = minimalTextPdf([
+      "Decreto n. 8.157/2026 - Pagina 1 de 1",
+      "DECRETO N. 8.157, DE 12 DE NOVEMBRO DE 2026.",
+      "Art. 1 Conteudo extraido que nao pode sobrescrever revisao concorrente.",
+    ]);
+    const pdf999018 = minimalTextPdf([
+      "Decreto n. 8.158/2026 - Pagina 1 de 1",
+      "DECRETO N. 8.158, DE 12 DE NOVEMBRO DE 2026.",
+      "Art. 1 Conteudo extraido que nao pode alterar ato ja publicado.",
+    ]);
+
+    const decreesHtml =
+      "<html><body><h1>Diário Oficial - São José do Rio Pardo</h1><h2>Listar Atos</h2><table>" +
+      '<tr><td>8157.2026 - Decreto concorrente IN_REVIEW</td><td>12/11/2026</td><td>999017</td><td>9</td><td><a href="' +
+      pdfUrl("999017") + '">Abrir</a></td><td>-</td></tr>' +
+      '<tr><td>8158.2026 - Decreto concorrente PUBLISHED</td><td>12/11/2026</td><td>999018</td><td>9</td><td><a href="' +
+      pdfUrl("999018") + '">Abrir</a></td><td>-</td></tr>' +
+      "</table></body></html>";
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const target = new URL(String(url));
+      if (target.pathname === "/listaatos.php") {
+        const s = target.searchParams.get("s");
+        if (s === "Decretos") return new Response(decreesHtml, { headers: { "content-type": "text/html" } });
+        if (s === "Leis") {
+          return new Response(
+            listing("Lei 7017 - auxiliar", "999017", "https://www.dosp.com.br/leituratexto?p=AUX17"),
+            { headers: { "content-type": "text/html" } }
+          );
+        }
+        if (s === "Portarias") {
+          return new Response(
+            listing("Portaria 20347 - auxiliar", "999017", "https://www.dosp.com.br/leituratexto?p=AUX18"),
+            { headers: { "content-type": "text/html" } }
+          );
+        }
+      }
+      if (target.pathname === "/leituratexto") {
+        return new Response(
+          "<html><body><h1>IMPRENSA OFICIAL - SÃO JOSÉ DO RIO PARDO</h1><p>Publicado em 12/11/2026</p></body></html>",
+          { headers: { "content-type": "text/html" } }
+        );
+      }
+      if (!pdfAvailable) {
+        return new Response("Indisponivel", { status: 503 });
+      }
+      if (target.pathname.includes("ed-999017-")) {
+        return new Response(pdf999017, { headers: { "content-type": "application/pdf" } });
+      }
+      if (target.pathname.includes("ed-999018-")) {
+        return new Response(pdf999018, { headers: { "content-type": "application/pdf" } });
+      }
+      throw new Error(`URL inesperada: ${target.toString()}`);
+    }));
+
+    // 1ª coleta: cria os dois registros em METADATA_ONLY_HTTP_ERROR
+    await runWithMockedCollector();
+    const act17 = await prisma.gazetteAct.findFirst({
+      where: { edition: { editionNumber: "999017", year: 2026 }, category: { slug: "decretos" } },
+    });
+    const act18 = await prisma.gazetteAct.findFirst({
+      where: { edition: { editionNumber: "999018", year: 2026 }, category: { slug: "decretos" } },
+    });
+    expect(act17).not.toBeNull();
+    expect(act18).not.toBeNull();
+    touchedActIds.push(act17!.id, act18!.id);
+
+    const { POST } = await import("@/app/api/admin/gazette/route");
+    const makePost = (payload: unknown) =>
+      POST(
+        new NextRequest("http://localhost:3000/api/admin/gazette", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      );
+
+    // 2ª coleta com barreira determinística pós-extração:
+    // enquanto a coleta conclui a extração de cada PDF e antes de persistir no banco,
+    // um editor envia 999017 para IN_REVIEW e envia/publica 999018.
+    pdfAvailable = true;
+    const interceptedEditions: string[] = [];
+    const concurrentRun = await runWithMockedCollector({
+      onAfterExtractBeforeSave: async ({ item }) => {
+        if (item.kind === "Decretos" && item.editionNumber === "999017") {
+          interceptedEditions.push(item.editionNumber);
+          const res = await makePost({
+            action: "REWRITE_IMPORTED_ACT",
+            actId: act17!.id,
+            titleSimple: "Decreto 8.157 revisado concorrentemente",
+            objectiveSummary:
+              "Revisão humana concluída enquanto a coleta finalizava a extração do PDF oficial.",
+            saveMode: "SEND_TO_REVIEW",
+          });
+          expect(res.status).toBe(200);
+        }
+        if (item.kind === "Decretos" && item.editionNumber === "999018") {
+          interceptedEditions.push(item.editionNumber);
+          const reviewRes = await makePost({
+            action: "REWRITE_IMPORTED_ACT",
+            actId: act18!.id,
+            titleSimple: "Decreto 8.158 publicado concorrentemente",
+            objectiveSummary:
+              "Resumo conferido e publicado antes de a coleta tentar gravar o PDF extraído.",
+            saveMode: "SEND_TO_REVIEW",
+          });
+          expect(reviewRes.status).toBe(200);
+          const publishRes = await makePost({
+            action: "PUBLISH_ACT",
+            actId: act18!.id,
+          });
+          expect(publishRes.status).toBe(200);
+        }
+      },
+    });
+
+    expect(interceptedEditions).toEqual(["999017", "999018"]);
+    expect(concurrentRun.errorCount).toBe(0);
+    expect(concurrentRun.logText).toContain(
+      "atualização ignorada por alteração editorial concorrente durante a coleta"
+    );
+
+    const act17After = await prisma.gazetteAct.findUnique({ where: { id: act17!.id } });
+    const doc17After = await prisma.importedDocument.findUnique({
+      where: { contentHash: act17!.contentHash },
+    });
+    expect(act17After?.status).toBe("IN_REVIEW");
+    expect(act17After?.titleSimple).toBe("Decreto 8.157 revisado concorrentemente");
+    expect(act17After?.rawExcerpt).toBeNull();
+    expect(doc17After?.rawText).toBeNull();
+    expect(doc17After?.extractionStatus).toBe("METADATA_ONLY_HTTP_ERROR");
+
+    const act18After = await prisma.gazetteAct.findUnique({ where: { id: act18!.id } });
+    const doc18After = await prisma.importedDocument.findUnique({
+      where: { contentHash: act18!.contentHash },
+    });
+    expect(act18After?.status).toBe("PUBLISHED");
+    expect(act18After?.titleSimple).toBe("Decreto 8.158 publicado concorrentemente");
+    expect(act18After?.rawExcerpt).toBeNull();
+    expect(doc18After?.rawText).toBeNull();
+    expect(doc18After?.extractionStatus).toBe("METADATA_ONLY_HTTP_ERROR");
+  }, 15_000);
+
+  it("detecta conflito (409) entre dois editores salvando a mesma versão e bloqueia salvamento concorrente com publicação", async () => {
+    assertLocalSqliteTestEnv();
+
+    const suffix = Date.now();
+    const editor1 = await prisma.user.create({
+      data: {
+        name: "Editor Um Conflito",
+        email: `editor-um-${suffix}@radarriopardo.local`,
+        passwordHash: "hash-nao-usado-em-teste",
+        role: "EDITOR",
+        active: true,
+      },
+    });
+    const editor2 = await prisma.user.create({
+      data: {
+        name: "Editor Dois Conflito",
+        email: `editor-dois-${suffix}@radarriopardo.local`,
+        passwordHash: "hash-nao-usado-em-teste",
+        role: "EDITOR",
+        active: true,
+      },
+    });
+    createdUserIds.push(editor1.id, editor2.id);
+
+    const category = await prisma.gazetteActCategory.findFirst({ where: { slug: "decretos" } });
+    expect(category).not.toBeNull();
+
+    const ed19 = await prisma.gazetteEdition.create({
+      data: {
+        editionNumber: "999019",
+        publicationDate: new Date("2026-11-12T12:00:00.000Z"),
+        year: 2026,
+        month: 11,
+        officialUrl: pdfUrl("999019"),
+        status: "PENDING_REVIEW",
+      },
+    });
+    const act19 = await prisma.gazetteAct.create({
+      data: {
+        editionId: ed19.id,
+        categoryId: category!.id,
+        titleSimple: "Decreto 8.159 inicial",
+        objectiveSummary: "Rascunho inicial para teste de conflito entre editores.",
+        officialUrl: pdfUrl("999019"),
+        contentHash: `test-hash-999019-${suffix}`,
+        status: "DRAFT_IMPORTED",
+      },
+    });
+
+    const ed20 = await prisma.gazetteEdition.create({
+      data: {
+        editionNumber: "999020",
+        publicationDate: new Date("2026-11-12T12:00:00.000Z"),
+        year: 2026,
+        month: 11,
+        officialUrl: pdfUrl("999020"),
+        status: "PENDING_REVIEW",
+      },
+    });
+    const act20 = await prisma.gazetteAct.create({
+      data: {
+        editionId: ed20.id,
+        categoryId: category!.id,
+        titleSimple: "Decreto 8.160 em revisão",
+        objectiveSummary: "Resumo revisado e pronto para publicação pelo editor.",
+        officialUrl: pdfUrl("999020"),
+        contentHash: `test-hash-999020-${suffix}`,
+        status: "IN_REVIEW",
+        reviewedById: editor1.id,
+        reviewedAt: new Date(),
+      },
+    });
+
+    const ed21 = await prisma.gazetteEdition.create({
+      data: {
+        editionNumber: "999021",
+        publicationDate: new Date("2026-11-12T12:00:00.000Z"),
+        year: 2026,
+        month: 11,
+        officialUrl: pdfUrl("999021"),
+        status: "PENDING_REVIEW",
+      },
+    });
+    const act21 = await prisma.gazetteAct.create({
+      data: {
+        editionId: ed21.id,
+        categoryId: category!.id,
+        titleSimple: "Decreto 8.161 corrida publicação",
+        objectiveSummary: "Resumo pronto para testar corrida simultânea com publicação.",
+        officialUrl: pdfUrl("999021"),
+        contentHash: `test-hash-999021-${suffix}`,
+        status: "IN_REVIEW",
+        reviewedById: editor1.id,
+        reviewedAt: new Date(),
+      },
+    });
+    touchedActIds.push(act19.id, act20.id, act21.id);
+
+    const { POST } = await import("@/app/api/admin/gazette/route");
+    const makePost = (payload: unknown) =>
+      POST(
+        new NextRequest("http://localhost:3000/api/admin/gazette", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      );
+
+    // 1. Dois editores carregam a mesma versão T0 do ato 999019
+    const initialVersion = act19.updatedAt.toISOString();
+
+    mockSessionUser = {
+      id: editor1.id,
+      name: editor1.name,
+      email: editor1.email,
+      role: "EDITOR",
+      sessionId: "test-session-e1",
+    };
+    const saveEditor1 = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act19.id,
+      titleSimple: "Decreto 8.159 salvo pelo Editor 1",
+      objectiveSummary: "Resumo detalhado salvo pelo Editor 1 na versão inicial.",
+      saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: initialVersion,
+    });
+    expect(saveEditor1.status).toBe(200);
+
+    // Editor 2 tenta salvar com base na mesma versão T0 defasada
+    mockSessionUser = {
+      id: editor2.id,
+      name: editor2.name,
+      email: editor2.email,
+      role: "EDITOR",
+      sessionId: "test-session-e2",
+    };
+    const saveEditor2 = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act19.id,
+      titleSimple: "Decreto 8.159 sobrescrita indevida Editor 2",
+      objectiveSummary: "Tentativa desatualizada que deve falhar com HTTP 409.",
+      saveMode: "SEND_TO_REVIEW",
+      expectedUpdatedAt: initialVersion,
+    });
+    expect(saveEditor2.status).toBe(409);
+
+    // Também garante conflito em execução paralela simultânea na versão atual T1
+    const afterEditor1 = await prisma.gazetteAct.findUnique({ where: { id: act19.id } });
+    expect(afterEditor1?.titleSimple).toBe("Decreto 8.159 salvo pelo Editor 1");
+    expect(afterEditor1?.reviewedById).toBe(editor1.id);
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act19.id },
+      })
+    ).toBe(1);
+
+    const versionT1 = afterEditor1!.updatedAt.toISOString();
+    const [raceA, raceB] = await Promise.all([
+      makePost({
+        action: "REWRITE_IMPORTED_ACT",
+        actId: act19.id,
+        titleSimple: "Decreto 8.159 corrida A",
+        objectiveSummary: "Edição concorrente A após recarregar versão T1.",
+        saveMode: "SEND_TO_REVIEW",
+        expectedUpdatedAt: versionT1,
+      }),
+      makePost({
+        action: "REWRITE_IMPORTED_ACT",
+        actId: act19.id,
+        titleSimple: "Decreto 8.159 corrida B",
+        objectiveSummary: "Edição concorrente B após recarregar versão T1.",
+        saveMode: "SEND_TO_REVIEW",
+        expectedUpdatedAt: versionT1,
+      }),
+    ]);
+    const raceStatuses = [raceA.status, raceB.status].sort((a, b) => a - b);
+    expect(raceStatuses).toEqual([200, 409]);
+    // Apenas 1 nova revisão foi criada para o vencedor da corrida (total 2)
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act19.id },
+      })
+    ).toBe(2);
+
+    // 2. Salvamento concorrente com publicação no ato 999020 (IN_REVIEW)
+    const revBeforePublish = act20.updatedAt.toISOString();
+    const publishRes = await makePost({
+      action: "PUBLISH_ACT",
+      actId: act20.id,
+      expectedUpdatedAt: revBeforePublish,
+    });
+    expect(publishRes.status).toBe(200);
+
+    // Tentativa de REWRITE_IMPORTED_ACT (com SAVE_DRAFT ou SEND_TO_REVIEW, com ou sem expectedUpdatedAt)
+    // em ato já PUBLISHED é bloqueada com HTTP 409 e nunca altera conteúdo ou status.
+    const lateSaveDraft = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act20.id,
+      titleSimple: "Tentativa de alterar ato publicado via SAVE_DRAFT",
+      objectiveSummary: "Não pode alterar conteúdo publicado nem regredir status.",
+      saveMode: "SAVE_DRAFT",
+      expectedUpdatedAt: revBeforePublish,
+    });
+    expect(lateSaveDraft.status).toBe(409);
+
+    const lateSendReviewNoVersion = await makePost({
+      action: "REWRITE_IMPORTED_ACT",
+      actId: act20.id,
+      titleSimple: "Tentativa de alterar ato publicado sem versionamento",
+      objectiveSummary: "Mesmo sem expectedUpdatedAt, não pode sobrescrever PUBLISHED.",
+      saveMode: "SEND_TO_REVIEW",
+    });
+    expect(lateSendReviewNoVersion.status).toBe(409);
+
+    // Tentativa de REVIEW_ACT para regredir PUBLISHED -> IN_REVIEW também retorna 409
+    const regressReviewRes = await makePost({
+      action: "REVIEW_ACT",
+      actId: act20.id,
+    });
+    expect(regressReviewRes.status).toBe(409);
+
+    const act20Final = await prisma.gazetteAct.findUnique({ where: { id: act20.id } });
+    expect(act20Final?.status).toBe("PUBLISHED");
+    expect(act20Final?.titleSimple).toBe("Decreto 8.160 em revisão");
+    expect(act20Final?.objectiveSummary).toBe(
+      "Resumo revisado e pronto para publicação pelo editor."
+    );
+    expect(
+      await prisma.editorialRevision.count({
+        where: { entityType: "GAZETTE_ACT", entityId: act20.id },
+      })
+    ).toBe(0);
+
+    // 3. Corrida simultânea real entre PUBLISH_ACT e REWRITE_IMPORTED_ACT no ato 999021
+    const act21Version = act21.updatedAt.toISOString();
+    const [concurrentPublish, concurrentRewrite] = await Promise.all([
+      makePost({
+        action: "PUBLISH_ACT",
+        actId: act21.id,
+        expectedUpdatedAt: act21Version,
+      }),
+      makePost({
+        action: "REWRITE_IMPORTED_ACT",
+        actId: act21.id,
+        titleSimple: "Decreto 8.161 alterado em paralelo à publicação",
+        objectiveSummary: "Nova redação enviada em paralelo com a ação de publicação.",
+        saveMode: "SEND_TO_REVIEW",
+        expectedUpdatedAt: act21Version,
+      }),
+    ]);
+    expect([concurrentPublish.status, concurrentRewrite.status].sort((a, b) => a - b)).toEqual([
+      200,
+      409,
+    ]);
+
+    const act21Final = await prisma.gazetteAct.findUnique({ where: { id: act21.id } });
+    if (concurrentPublish.status === 200) {
+      expect(act21Final?.status).toBe("PUBLISHED");
+      expect(act21Final?.titleSimple).toBe("Decreto 8.161 corrida publicação");
+      expect(
+        await prisma.editorialRevision.count({
+          where: { entityType: "GAZETTE_ACT", entityId: act21.id },
+        })
+      ).toBe(0);
+    } else {
+      expect(act21Final?.status).toBe("IN_REVIEW");
+      expect(act21Final?.titleSimple).toBe("Decreto 8.161 alterado em paralelo à publicação");
+      expect(
+        await prisma.editorialRevision.count({
+          where: { entityType: "GAZETTE_ACT", entityId: act21.id },
+        })
+      ).toBe(1);
+    }
   }, 15_000);
 });

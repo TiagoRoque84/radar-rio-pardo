@@ -116,6 +116,22 @@ function classifyMetadataOnlyStatus(scan: PdfTextScan | null): string {
   return "METADATA_ONLY";
 }
 
+export interface ImprensaOficialCollectorOptions {
+  onAfterExtractBeforeSave?: (info: {
+    item: ListedOfficialAct;
+    contentHash: string;
+  }) => Promise<void>;
+}
+
+function isPrismaWriteConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2034"
+  );
+}
+
 async function collectOne(
   item: ListedOfficialAct,
   ctx: CollectorContext,
@@ -126,7 +142,8 @@ async function collectOne(
     attemptedUrls: Set<string>;
     pageCache: Map<string, CachedEditionPdfPages>;
   },
-  logs: string[]
+  logs: string[],
+  options?: ImprensaOficialCollectorOptions
 ): Promise<"IMPORTED" | "DUPLICATE"> {
   const year = item.publicationDate.getUTCFullYear();
   const contentHash = computeContentHash(
@@ -138,7 +155,15 @@ async function collectOne(
   const existingAct = previous
     ? await prisma.gazetteAct.findUnique({
         where: { contentHash },
-        select: { id: true, status: true, hasPersonalDataAlert: true },
+        select: {
+          id: true,
+          status: true,
+          reviewedById: true,
+          reviewedAt: true,
+          updatedAt: true,
+          rawExcerpt: true,
+          hasPersonalDataAlert: true,
+        },
       })
     : null;
 
@@ -259,12 +284,20 @@ async function collectOne(
     sanitizedTitleResult.hasPersonalData;
   const sourceUrl = (item.textUrl || item.editionUrl).slice(0, 700);
 
+  if (options?.onAfterExtractBeforeSave) {
+    await options.onAfterExtractBeforeSave({ item, contentHash });
+  }
+
   // Se o registro anterior ainda estava sem texto e continuou sem texto desta vez,
-  // atualizamos apenas o diagnóstico (se mais específico) e contabilizamos duplicidade.
+  // atualizamos apenas o diagnóstico (se ainda intacto) e contabilizamos duplicidade.
   if (previous && existingAct && rawTextForDb === null) {
     if (previous.extractionStatus !== extractionStatus) {
-      await prisma.importedDocument.update({
-        where: { id: previous.id },
+      await prisma.importedDocument.updateMany({
+        where: {
+          id: previous.id,
+          rawText: previous.rawText,
+          extractionStatus: previous.extractionStatus,
+        },
         data: { extractionStatus },
       });
     }
@@ -272,32 +305,96 @@ async function collectOne(
   }
 
   if (previous && existingAct) {
-    await prisma.$transaction(async (tx) => {
-      await tx.importedDocument.update({
-        where: { id: previous.id },
-        data: {
-          runId: ctx.runId,
-          originalUrl: sourceUrl,
-          mimeType,
-          rawText: rawTextForDb,
-          extractionStatus,
-        },
-      });
+    const wasHumanEdited =
+      existingAct.reviewedById !== null || existingAct.reviewedAt !== null;
+    const nextUpdatedAt = new Date(
+      Math.max(Date.now(), existingAct.updatedAt.getTime() + 1)
+    );
 
-      await tx.gazetteAct.update({
-        where: { id: existingAct.id },
-        data: {
-          actNumber: verifiedActNumber,
-          actDate: verifiedActDate,
-          pageNumber: verifiedPageNumber,
-          titleSimple: sanitizedTitle.slice(0, 350),
-          objectiveSummary: summary.sanitizedText,
-          rawExcerpt: rawExcerptForAct,
-          officialUrl: sourceUrl,
-          hasPersonalDataAlert,
-        },
+    try {
+      await prisma.$transaction(async (tx) => {
+        const docUpdate = await tx.importedDocument.updateMany({
+          where: {
+            id: previous.id,
+            rawText: previous.rawText,
+            extractionStatus: previous.extractionStatus,
+          },
+          data: {
+            runId: ctx.runId,
+            originalUrl: sourceUrl,
+            mimeType,
+            rawText: rawTextForDb,
+            extractionStatus,
+          },
+        });
+        if (docUpdate.count !== 1) {
+          throw new Error("COLLECTOR_CONCURRENT_MODIFICATION");
+        }
+
+        if (wasHumanEdited) {
+          // Preserva todos os campos editoriais salvos por uma pessoa (SAVE_DRAFT);
+          // enriquece apenas o trecho de origem (se ausente) e o alerta LGPD.
+          const actUpdate = await tx.gazetteAct.updateMany({
+            where: {
+              id: existingAct.id,
+              status: "DRAFT_IMPORTED",
+              reviewedById: existingAct.reviewedById,
+              reviewedAt: existingAct.reviewedAt,
+              updatedAt: existingAct.updatedAt,
+            },
+            data: {
+              ...(existingAct.rawExcerpt === null ? { rawExcerpt: rawExcerptForAct } : {}),
+              hasPersonalDataAlert: existingAct.hasPersonalDataAlert || hasLgpdInBody,
+              updatedAt: nextUpdatedAt,
+            },
+          });
+          if (actUpdate.count !== 1) {
+            throw new Error("COLLECTOR_CONCURRENT_MODIFICATION");
+          }
+        } else {
+          const actUpdate = await tx.gazetteAct.updateMany({
+            where: {
+              id: existingAct.id,
+              status: "DRAFT_IMPORTED",
+              reviewedById: null,
+              reviewedAt: null,
+              updatedAt: existingAct.updatedAt,
+            },
+            data: {
+              actNumber: verifiedActNumber,
+              actDate: verifiedActDate,
+              pageNumber: verifiedPageNumber,
+              titleSimple: sanitizedTitle.slice(0, 350),
+              objectiveSummary: summary.sanitizedText,
+              rawExcerpt: rawExcerptForAct,
+              officialUrl: sourceUrl,
+              hasPersonalDataAlert,
+              updatedAt: nextUpdatedAt,
+            },
+          });
+          if (actUpdate.count !== 1) {
+            throw new Error("COLLECTOR_CONCURRENT_MODIFICATION");
+          }
+        }
       });
-    });
+    } catch (error) {
+      if (
+        (error instanceof Error && error.message === "COLLECTOR_CONCURRENT_MODIFICATION") ||
+        isPrismaWriteConflict(error)
+      ) {
+        logs.push(
+          `${item.kind}, edição ${item.editionNumber}: atualização ignorada por alteração editorial concorrente durante a coleta.`
+        );
+        return "DUPLICATE";
+      }
+      throw error;
+    }
+
+    if (wasHumanEdited) {
+      logs.push(
+        `${item.kind}, edição ${item.editionNumber}: texto de origem enriquecido preservando rascunho editado manualmente.`
+      );
+    }
     return "IMPORTED";
   }
 
@@ -362,7 +459,8 @@ async function collectOne(
 }
 
 export async function runImprensaOficialCollector(
-  ctx: CollectorContext
+  ctx: CollectorContext,
+  options?: ImprensaOficialCollectorOptions
 ): Promise<CollectorResult> {
   const logs: string[] = [];
   const start = Date.now();
@@ -430,7 +528,7 @@ export async function runImprensaOficialCollector(
 
         try {
           const result = await collectOne(
-            item, ctx, categoryId, detailBudget, pdfState, logs
+            item, ctx, categoryId, detailBudget, pdfState, logs, options
           );
           if (result === "IMPORTED") imported++;
           else duplicates++;

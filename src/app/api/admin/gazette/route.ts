@@ -11,6 +11,22 @@ import { computeContentHash } from "@/lib/collectors/types";
 import { detectAndMaskPersonalData } from "@/lib/privacy/lgpd-sanitizer";
 import { recordAuditLog } from "@/lib/auth/audit";
 
+class ConcurrentModificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConcurrentModificationError";
+  }
+}
+
+function isPrismaWriteConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2034"
+  );
+}
+
 const AUTO_DRAFT_SUMMARY_PATTERNS = [
   /^Ementa oficial \(revisão obrigatória\):/i,
   /^Ato identificado na listagem oficial/i,
@@ -43,6 +59,17 @@ const rewriteImportedActSchema = z.object({
   agencyId: z.string().trim().optional().nullable(),
   deadlinesText: z.string().trim().max(500).optional().nullable(),
   saveMode: z.enum(["SAVE_DRAFT", "SEND_TO_REVIEW"]).optional().default("SEND_TO_REVIEW"),
+  expectedUpdatedAt: z.preprocess(
+    (v) => (v === "" ? null : v),
+    z
+      .string()
+      .trim()
+      .refine((v) => !Number.isNaN(new Date(v).getTime()), {
+        message: "Versão do registro (expectedUpdatedAt) inválida.",
+      })
+      .optional()
+      .nullable()
+  ),
 });
 
 export async function GET() {
@@ -279,14 +306,26 @@ export async function POST(request: NextRequest) {
       }
 
       const previous = await prisma.gazetteAct.findUnique({ where: { id: d.actId } });
-      if (
-        !previous ||
-        (previous.status !== "DRAFT_IMPORTED" && previous.status !== "IN_REVIEW")
-      ) {
+      if (!previous) {
+        return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
+      }
+      if (previous.status !== "DRAFT_IMPORTED" && previous.status !== "IN_REVIEW") {
         return NextResponse.json(
-          { error: "Ato em rascunho/revisão não encontrado ou já finalizado." },
+          { error: "Apenas atos em rascunho ou em revisão podem receber nova edição por este fluxo." },
           { status: 409 }
         );
+      }
+      if (d.expectedUpdatedAt) {
+        const expectedTime = new Date(d.expectedUpdatedAt).getTime();
+        if (expectedTime !== previous.updatedAt.getTime()) {
+          return NextResponse.json(
+            {
+              error:
+                "Conflito de edição: este ato foi alterado por outro usuário ou processo. Recarregue a página antes de salvar.",
+            },
+            { status: 409 }
+          );
+        }
       }
 
       let nextAgencyId = previous.agencyId;
@@ -348,10 +387,23 @@ export async function POST(request: NextRequest) {
 
       const targetStatus =
         d.saveMode === "SEND_TO_REVIEW" ? "IN_REVIEW" : previous.status;
+      const hasPersonalDataAlert =
+        previous.hasPersonalDataAlert ||
+        maskedTitle.hasPersonalData ||
+        maskedSummary.hasPersonalData ||
+        Boolean(maskedDeadlines?.hasPersonalData);
+      const nextUpdatedAt = new Date(
+        Math.max(Date.now(), previous.updatedAt.getTime() + 1)
+      );
+      const reviewedAt = new Date();
 
       const updated = await prisma.$transaction(async (tx) => {
-        const act = await tx.gazetteAct.update({
-          where: { id: d.actId },
+        const updateResult = await tx.gazetteAct.updateMany({
+          where: {
+            id: d.actId,
+            status: previous.status,
+            updatedAt: previous.updatedAt,
+          },
           data: {
             actNumber: nextActNumber,
             actDate: nextActDate,
@@ -363,25 +415,33 @@ export async function POST(request: NextRequest) {
             titleSimple: maskedTitle.sanitizedText,
             objectiveSummary: maskedSummary.sanitizedText,
             status: targetStatus,
-            hasPersonalDataAlert:
-              previous.hasPersonalDataAlert ||
-              maskedTitle.hasPersonalData ||
-              maskedSummary.hasPersonalData ||
-              Boolean(maskedDeadlines?.hasPersonalData),
+            hasPersonalDataAlert,
             reviewedById: user.id,
-            reviewedAt: new Date(),
+            reviewedAt,
+            updatedAt: nextUpdatedAt,
           },
+        });
+        if (updateResult.count !== 1) {
+          throw new ConcurrentModificationError(
+            "Conflito de edição: este ato foi alterado concorrentemente por outro usuário ou processo. Recarregue a página antes de salvar."
+          );
+        }
+
+        const act = await tx.gazetteAct.findUniqueOrThrow({
+          where: { id: d.actId },
           include: { category: true, edition: true, agency: true },
         });
 
-        const revCount = await tx.editorialRevision.count({
+        const lastRev = await tx.editorialRevision.findFirst({
           where: { entityType: "GAZETTE_ACT", entityId: d.actId },
+          orderBy: { versionNumber: "desc" },
+          select: { versionNumber: true },
         });
         await tx.editorialRevision.create({
           data: {
             entityType: "GAZETTE_ACT",
             entityId: d.actId,
-            versionNumber: revCount + 1,
+            versionNumber: (lastRev?.versionNumber ?? 0) + 1,
             snapshotJson: JSON.stringify(act),
             notes:
               d.saveMode === "SEND_TO_REVIEW"
@@ -421,13 +481,29 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const actId = String(body.actId || "");
+      const actId = String(body.actId || "").trim();
+      if (!actId) {
+        return NextResponse.json({ error: "Ato inválido." }, { status: 400 });
+      }
+      let expectedUpdatedDate: Date | null = null;
+      if (typeof body.expectedUpdatedAt === "string" && body.expectedUpdatedAt.trim()) {
+        const parsedExpected = new Date(body.expectedUpdatedAt.trim());
+        if (Number.isNaN(parsedExpected.getTime())) {
+          return NextResponse.json(
+            { error: "Versão do registro (expectedUpdatedAt) inválida." },
+            { status: 400 }
+          );
+        }
+        expectedUpdatedDate = parsedExpected;
+      }
+
       const targetStatus =
         body.action === "PUBLISH_ACT" ? "PUBLISHED" : "IN_REVIEW";
+      const allowedStatuses = ["IN_REVIEW", "APPROVED"];
 
       const candidate = await prisma.gazetteAct.findUnique({
         where: { id: actId },
-        select: { status: true },
+        select: { id: true, editionId: true, status: true, updatedAt: true },
       });
       if (!candidate) {
         return NextResponse.json({ error: "Ato não encontrado." }, { status: 404 });
@@ -438,22 +514,66 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-
-      const updatedAct = await prisma.gazetteAct.update({
-        where: { id: actId },
-        data: {
-          status: targetStatus,
-          reviewedById: user.id,
-          reviewedAt: new Date(),
-        },
-      });
-
-      if (targetStatus === "PUBLISHED") {
-        await prisma.gazetteEdition.update({
-          where: { id: updatedAct.editionId },
-          data: { status: "PUBLISHED" },
-        });
+      if (!allowedStatuses.includes(candidate.status)) {
+        return NextResponse.json(
+          {
+            error:
+              "Este ato já foi publicado ou não está em status elegível para esta ação. Recarregue a página.",
+          },
+          { status: 409 }
+        );
       }
+      if (
+        expectedUpdatedDate &&
+        expectedUpdatedDate.getTime() !== candidate.updatedAt.getTime()
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Conflito de revisão/publicação: este ato foi alterado depois que a tela foi carregada. Recarregue a página antes de continuar.",
+          },
+          { status: 409 }
+        );
+      }
+
+      const nextUpdatedAt = new Date(
+        Math.max(Date.now(), candidate.updatedAt.getTime() + 1)
+      );
+      const reviewedAt = new Date();
+
+      const updatedAct = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.gazetteAct.updateMany({
+          where: {
+            id: actId,
+            status: candidate.status,
+            updatedAt: candidate.updatedAt,
+          },
+          data: {
+            status: targetStatus,
+            reviewedById: user.id,
+            reviewedAt,
+            updatedAt: nextUpdatedAt,
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new ConcurrentModificationError(
+            "Conflito de revisão/publicação: este ato foi modificado concorrentemente. Recarregue a página antes de tentar novamente."
+          );
+        }
+
+        const act = await tx.gazetteAct.findUniqueOrThrow({
+          where: { id: actId },
+        });
+
+        if (targetStatus === "PUBLISHED") {
+          await tx.gazetteEdition.update({
+            where: { id: act.editionId },
+            data: { status: "PUBLISHED" },
+          });
+        }
+
+        return act;
+      });
 
       await recordAuditLog({
         userId: user.id,
@@ -467,6 +587,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
   } catch (error) {
+    if (error instanceof ConcurrentModificationError || isPrismaWriteConflict(error)) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof ConcurrentModificationError
+              ? error.message
+              : "Conflito de edição concorrente. Recarregue a página antes de tentar novamente.",
+        },
+        { status: 409 }
+      );
+    }
     console.error("Erro na API do Diário Oficial:", error);
     return NextResponse.json(
       {

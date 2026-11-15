@@ -26,6 +26,7 @@ interface Act {
   titleSimple: string;
   status: string;
   hasPersonalDataAlert: boolean;
+  updatedAt?: string;
   extractionStatus?: string | null;
   mimeType?: string | null;
   category: { name: string };
@@ -165,6 +166,7 @@ export default function AdminDiarioOficialPage() {
   const [draftPageNumber, setDraftPageNumber] = useState("");
   const [draftAgencyId, setDraftAgencyId] = useState("");
   const [draftDeadlinesText, setDraftDeadlinesText] = useState("");
+  const [draftExpectedUpdatedAt, setDraftExpectedUpdatedAt] = useState<string | null>(null);
 
   async function loadData() {
     const res = await fetch("/api/admin/gazette");
@@ -243,12 +245,16 @@ export default function AdminDiarioOficialPage() {
     }
   }
 
-  async function handlePublishAct(actId: string) {
+  async function handlePublishAct(actId: string, expectedUpdatedAt?: string) {
     setError("");
     const res = await fetch("/api/admin/gazette", {
       method: "POST",
       headers: csrfJsonHeaders(),
-      body: JSON.stringify({ action: "PUBLISH_ACT", actId }),
+      body: JSON.stringify({
+        action: "PUBLISH_ACT",
+        actId,
+        expectedUpdatedAt: expectedUpdatedAt ?? null,
+      }),
     });
     const data = await res.json();
     if (!res.ok) setError(data.error);
@@ -292,6 +298,7 @@ export default function AdminDiarioOficialPage() {
     setDraftPageNumber(act.pageNumber ? String(act.pageNumber) : "");
     setDraftAgencyId(act.agencyId || "");
     setDraftDeadlinesText(act.deadlinesText || "");
+    setDraftExpectedUpdatedAt(act.updatedAt ?? null);
   }
 
   async function handleRewriteImportedAct(
@@ -315,6 +322,7 @@ export default function AdminDiarioOficialPage() {
           agencyId: draftAgencyId || null,
           deadlinesText: draftDeadlinesText || null,
           saveMode,
+          expectedUpdatedAt: draftExpectedUpdatedAt,
         }),
       });
       const data = await res.json();
@@ -323,6 +331,7 @@ export default function AdminDiarioOficialPage() {
         return;
       }
       setEditingActId(null);
+      setDraftExpectedUpdatedAt(null);
       setFeedback(
         saveMode === "SEND_TO_REVIEW"
           ? "Revisão editorial salva e ato enviado para IN_REVIEW. Confira antes de publicar."
@@ -656,7 +665,7 @@ export default function AdminDiarioOficialPage() {
                         act.status !== "PUBLISHED" && (
                           <button
                             type="button"
-                            onClick={() => handlePublishAct(act.id)}
+                            onClick={() => handlePublishAct(act.id, act.updatedAt)}
                             className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -834,7 +843,10 @@ export default function AdminDiarioOficialPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingActId(null)}
+                          onClick={() => {
+                            setEditingActId(null);
+                            setDraftExpectedUpdatedAt(null);
+                          }}
                           className="rounded px-3 py-2 text-xs text-radar-muted hover:underline"
                         >
                           Cancelar
