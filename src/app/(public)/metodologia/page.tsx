@@ -44,9 +44,7 @@ export default async function MetodologiaPage() {
             é convertida em falta do parlamentar.
           </li>
           <li>
-            <strong>Diário Oficial:</strong> Cada ato recebe resumo em linguagem
-            simples somente após extração legível e revisão humana. Documentos
-            ilegíveis permanecem marcados como pendentes de revisão.
+            <strong>Diário Oficial:</strong> O Radar publica automaticamente as edições da Imprensa Oficial, os assuntos do sumário e as ementas identificadas no início dos atos. A página indica a origem automática e dá acesso ao PDF original. A redação também pode publicar explicações revisadas.
           </li>
         </ul>
       </section>

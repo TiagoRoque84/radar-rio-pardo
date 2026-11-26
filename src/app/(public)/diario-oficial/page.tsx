@@ -27,7 +27,7 @@ export default async function DiarioOficialPage({
     prisma.gazetteActCategory.findMany({ orderBy: { name: "asc" } }),
     prisma.gazetteEdition.findMany({
       where: {
-        status: "PUBLISHED",
+        status: { in: ["PUBLISHED", "AUTO_PUBLISHED"] },
         ...(yearFilter ? { year: yearFilter } : {}),
         ...(monthFilter ? { month: monthFilter } : {}),
       },
@@ -66,12 +66,10 @@ export default async function DiarioOficialPage({
       <div className="space-y-2">
         <h1 className="text-3xl font-bold flex items-center gap-2.5">
           <FileText className="h-7 w-7 text-radar-blue" aria-hidden="true" />
-          Diário Oficial Municipal — Resumos Verificados
+          Diário Oficial Municipal
         </h1>
         <p className="text-sm sm:text-base text-radar-muted dark:text-slate-300 max-w-3xl">
-          Tradução de atos oficiais da Imprensa Oficial de São José do Rio Pardo
-          para linguagem clara, mantendo links diretos aos documentos originais.
-          Não prometemos edição diária quando o município não publica edição no dia.
+          Edições de São José do Rio Pardo com links para os documentos originais, resumos automáticos e atos explicados pela redação.
         </p>
       </div>
 
@@ -163,14 +161,14 @@ export default async function DiarioOficialPage({
                   <span>{formatDateBR(ed.publicationDate)}</span>
                 </div>
                 <p className="text-xs text-radar-muted dark:text-slate-300">
-                  {ed.totalActs} ato(s) catalogado(s)
+                  {ed.status === "AUTO_PUBLISHED" ? (ed.summaryText ? "Edição com leitura automática" : "PDF oficial disponível") : ed.totalActs + " ato(s) catalogado(s)"}
                 </p>
                 <div className="flex items-center justify-between pt-2 text-xs">
                   <Link
                     href={`/diario-oficial/${ed.id}`}
                     className="font-semibold text-radar-blue hover:underline"
                   >
-                    Ver resumo →
+                    Ver edição →
                   </Link>
                   <a
                     href={ed.officialUrl}
@@ -187,7 +185,7 @@ export default async function DiarioOficialPage({
         ) : (
           <EmptyStateCard
             title="Nenhuma edição do Diário Oficial publicada no portal ainda"
-            description="A coleta e revisão editorial do Diário Oficial Eletrônico de São José do Rio Pardo ocorrem mediante validação humana dos documentos oficiais."
+            description="O Radar consulta as edições divulgadas pela Imprensa Oficial Municipal."
             sourceLabel="Imprensa Oficial Municipal SJRP"
             sourceUrl="https://www.imprensaoficialmunicipal.com.br/sjriopardo"
           />

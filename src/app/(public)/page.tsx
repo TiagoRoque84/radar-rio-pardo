@@ -54,7 +54,7 @@ export default async function HomePage() {
       take: 4,
     }),
     prisma.gazetteEdition.findFirst({
-      where: { status: "PUBLISHED" },
+      where: { status: { in: ["PUBLISHED", "AUTO_PUBLISHED"] } },
       include: {
         acts: {
           where: { status: "PUBLISHED" },
@@ -231,7 +231,7 @@ export default async function HomePage() {
               <div className="flex items-center justify-between border-b border-radar-border pb-3">
                 <div>
                   <span className="text-xs font-semibold uppercase tracking-wide text-radar-blue">
-                    Última edição verificada
+                    Última edição
                   </span>
                   <p className="text-lg font-bold">
                     Edição nº {latestEdition.editionNumber}
@@ -243,8 +243,7 @@ export default async function HomePage() {
               </div>
 
               <p className="text-sm text-radar-muted dark:text-slate-300">
-                {latestEdition.acts.length} ato(s) resumido(s) e aprovado(s) para
-                leitura rápida nesta edição.
+                {latestEdition.status === "AUTO_PUBLISHED" ? (latestEdition.summaryText?.split("\n")[0] || "PDF disponível para consulta.") : latestEdition.acts.length + " ato(s) com resumo editorial."}
               </p>
 
               <ul className="space-y-2.5">
@@ -268,7 +267,7 @@ export default async function HomePage() {
                   href={`/diario-oficial/${latestEdition.id}`}
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-radar-blue px-4 py-2 text-sm font-semibold text-white hover:bg-radar-blue-hover transition"
                 >
-                  Acessar resumo completo
+                  Consultar edição
                 </Link>
                 <a
                   href={latestEdition.officialUrl}
