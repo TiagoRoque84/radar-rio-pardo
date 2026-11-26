@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { chamberAuthors } from "@/lib/chamber/production";
 import { Landmark, ExternalLink, Info } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDateBR } from "@/lib/formatters";
@@ -23,7 +25,7 @@ const PROPOSITION_LABELS: Record<string, string> = {
 };
 
 export default async function CamaraPage() {
-  const [legislature, councilors, propositions, sessions] = await Promise.all([
+  const [legislature, councilors, propositions, sessions, authors] = await Promise.all([
     prisma.legislature.findFirst({ where: { isCurrent: true } }),
     prisma.councilor.findMany({
       where: { active: true },
@@ -42,6 +44,7 @@ export default async function CamaraPage() {
       orderBy: { sessionDate: "desc" },
       take: 12,
     }),
+    chamberAuthors(),
   ]);
 
   const byTypeMap = new Map<string, number>();
@@ -83,11 +86,11 @@ export default async function CamaraPage() {
         </div>
         <div className="radar-card p-5">
           <span className="text-xs font-semibold text-radar-muted">
-            Vereadores Catalogados
+            Autores na Câmara
           </span>
-          <p className="mt-1 text-xl font-bold">{councilors.length}</p>
+          <p className="mt-1 text-xl font-bold">{authors.length}</p>
           <span className="text-xs text-radar-muted">
-            Com histórico preservado
+            Produção legislativa de 2025–2028
           </span>
         </div>
         <div className="radar-card p-5">
@@ -125,6 +128,11 @@ export default async function CamaraPage() {
       {/* Vereadores */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Vereadores da Legislatura</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {authors.map(author => <Link className="radar-card block p-4 hover:underline" href={`/camara/${author.id}`} key={author.id}>
+            <strong>{author.name}</strong><span className="block text-sm">{author.total} proposituras</span>
+          </Link>)}
+        </div>
         {councilors.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {councilors.map((c) => (
@@ -160,14 +168,7 @@ export default async function CamaraPage() {
               </div>
             ))}
           </div>
-        ) : (
-          <EmptyStateCard
-            title="Cadastro de vereadores aguardando importação oficial"
-            description="Os perfis parlamentares serão exibidos após importação verificada no portal oficial da Câmara Municipal de São José do Rio Pardo, preservando histórico de legislaturas e filiações."
-            sourceLabel="Câmara Municipal SJRP"
-            sourceUrl="https://camarasjriopardo.sp.gov.br/"
-          />
-        )}
+        ) : null}
       </section>
 
       {/* Proposições e Gráfico */}

@@ -1,3 +1,4 @@
+import { chamberAuthors } from "@/lib/chamber/production";
 import Link from "next/link";
 import {
   FileText,
@@ -65,7 +66,7 @@ export default async function HomePage() {
       orderBy: { publicationDate: "desc" },
     }),
     prisma.legislature.findFirst({ where: { isCurrent: true } }),
-    prisma.councilor.count({ where: { active: true } }),
+    chamberAuthors().then(authors => authors.length),
     prisma.legislativeProposition.count(),
     prisma.chamberSession.count(),
     prisma.biddingProcess.findMany({
@@ -386,7 +387,7 @@ export default async function HomePage() {
             </div>
             <div className="rounded-lg bg-radar-light dark:bg-slate-800/60 p-4">
               <span className="text-xs text-radar-muted dark:text-slate-300">
-                Vereadores cadastrados
+                Autores na Câmara
               </span>
               <p className="mt-1 text-2xl font-bold">{councilorsCount}</p>
               <span className="text-[11px] text-radar-muted dark:text-slate-400">

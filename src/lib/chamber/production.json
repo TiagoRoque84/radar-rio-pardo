@@ -1,0 +1,611 @@
+{
+  "asOf": "2026-11-26",
+  "authors": [
+    {
+      "id": "144",
+      "name": "Adriano Rodrigues Junior",
+      "total": 640,
+      "types": [
+        {
+          "type": "52",
+          "name": "Atos da Mesa",
+          "count": 3
+        },
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 3
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 427
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 55
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 5
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 9
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 3
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 4
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 131
+        }
+      ]
+    },
+    {
+      "id": "145",
+      "name": "Alexandre Tosini Felicissimo\n",
+      "total": 863,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 3
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 416
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 37
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 3
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 9
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 1
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 2
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 392
+        }
+      ]
+    },
+    {
+      "id": "109",
+      "name": "Antônio J. Quessada Neto",
+      "total": 49,
+      "types": [
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 21
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 3
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 1
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 4
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 3
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 3
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 14
+        }
+      ]
+    },
+    {
+      "id": "136",
+      "name": "Dante Lemes dos Santos",
+      "total": 240,
+      "types": [
+        {
+          "type": "52",
+          "name": "Atos da Mesa",
+          "count": 3
+        },
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 2
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 105
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 67
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 1
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 7
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 3
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 4
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 48
+        }
+      ]
+    },
+    {
+      "id": "115",
+      "name": "Fernando Gomes",
+      "total": 61,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 1
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 38
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 6
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 3
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 2
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 1
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "id": "64",
+      "name": "Lúcia Helena Libânio da Cruz",
+      "total": 77,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 2
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 6
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 14
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 2
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 4
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 4
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 4
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 41
+        }
+      ]
+    },
+    {
+      "id": "146",
+      "name": "Marcelo Henrique Clementino",
+      "total": 68,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 1
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 40
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 4
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 3
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 5
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 1
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 2
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "id": "147",
+      "name": "Priscila Abreu",
+      "total": 46,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 1
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 7
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 20
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 2
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 6
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 2
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 3
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "id": "89",
+      "name": "Prof. Rafael Kocian",
+      "total": 2952,
+      "types": [
+        {
+          "type": "52",
+          "name": "Atos da Mesa",
+          "count": 20
+        },
+        {
+          "type": "53",
+          "name": "Atos da Presidência",
+          "count": 11
+        },
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 18
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 1116
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 506
+        },
+        {
+          "type": "107",
+          "name": "Portaria do Legislativo",
+          "count": 78
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 5
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 17
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 14
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 3
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 1164
+        }
+      ]
+    },
+    {
+      "id": "34",
+      "name": "Reinaldo Milan",
+      "total": 62,
+      "types": [
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 17
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 24
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 1
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 1
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 19
+        }
+      ]
+    },
+    {
+      "id": "90",
+      "name": "Rubens Lobato Pinheiro Neto",
+      "total": 138,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 6
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 18
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 42
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 3
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 4
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 5
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 3
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 57
+        }
+      ]
+    },
+    {
+      "id": "148",
+      "name": "Sara Mafepi",
+      "total": 221,
+      "types": [
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 71
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 52
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 1
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 6
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 2
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 1
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 88
+        }
+      ]
+    },
+    {
+      "id": "91",
+      "name": "Sidnei Marin Morgan",
+      "total": 203,
+      "types": [
+        {
+          "type": "33",
+          "name": "Emenda",
+          "count": 2
+        },
+        {
+          "type": "29",
+          "name": "Indicação",
+          "count": 107
+        },
+        {
+          "type": "27",
+          "name": "Moção",
+          "count": 19
+        },
+        {
+          "type": "118",
+          "name": "Projeto de Decreto Legislativo",
+          "count": 4
+        },
+        {
+          "type": "119",
+          "name": "Projeto de Lei do Legislativo",
+          "count": 6
+        },
+        {
+          "type": "120",
+          "name": "Projeto de Resolução",
+          "count": 2
+        },
+        {
+          "type": "121",
+          "name": "Proposta de Emenda à L.O.M.",
+          "count": 3
+        },
+        {
+          "type": "30",
+          "name": "Requerimento",
+          "count": 60
+        }
+      ]
+    }
+  ]
+}
