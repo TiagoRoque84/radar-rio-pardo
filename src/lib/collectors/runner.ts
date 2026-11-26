@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { runImprensaOficialCollector } from "./imprensa-oficial-collector";
 import { runPncpCollector } from "./pncp-collector";
 import { runAvailabilityCollector } from "./availability-collector";
+import { collectOfficialEditions } from "./official-editions";
 import { CollectorResult } from "./types";
 
 function parseCheckpointJson(raw?: string | null): Record<string, unknown> | null {
@@ -45,7 +46,8 @@ function buildAdapterErrorSummary(result: CollectorResult): string | null {
 
 export async function executeAdapterCollection(
   adapterKey: string,
-  triggerType: "MANUAL" | "CRON" = "MANUAL"
+  triggerType: "MANUAL" | "CRON" = "MANUAL",
+  scheduledFor?: Date
 ) {
   const adapter = await prisma.integrationAdapter.findUnique({
     where: { adapterKey },
@@ -54,12 +56,6 @@ export async function executeAdapterCollection(
 
   if (!adapter) {
     throw new Error(`Adaptador "${adapterKey}" não encontrado.`);
-  }
-
-  if (adapter.status === "RUNNING") {
-    throw new Error(
-      `O adaptador "${adapter.name}" já está em execução. Aguarde a conclusão para evitar conflitos.`
-    );
   }
 
   const lastRunWithCheckpoint = await prisma.collectionRun.findFirst({
@@ -75,17 +71,25 @@ export async function executeAdapterCollection(
     lastRunWithCheckpoint?.checkpointJson
   );
 
-  await prisma.integrationAdapter.update({
-    where: { id: adapter.id },
-    data: { status: "RUNNING", lastRunAt: new Date() },
-  });
-
-  const run = await prisma.collectionRun.create({
-    data: {
-      adapterId: adapter.id,
-      status: "RUNNING",
-      triggerType,
-    },
+  const startedAt = new Date();
+  const staleBefore = new Date(startedAt.getTime() - 60 * 60_000);
+  const run = await prisma.$transaction(async (tx) => {
+    const claim = await tx.integrationAdapter.updateMany({
+      where: {
+        id: adapter.id,
+        AND: [
+          { OR: [{ status: { not: "RUNNING" } }, { lastRunAt: { lt: staleBefore } }, { lastRunAt: null }] },
+          ...(scheduledFor ? [{ source: { active: true }, OR: [{ lastRunAt: null }, { lastRunAt: { lt: scheduledFor } }] }] : []),
+        ],
+      },
+      data: { status: "RUNNING", lastRunAt: startedAt },
+    });
+    if (!claim.count) throw new Error("Coleta já iniciada para este adaptador.");
+    await tx.collectionRun.updateMany({
+      where: { adapterId: adapter.id, status: "RUNNING" },
+      data: { status: "ERROR", finishedAt: startedAt, errorCount: 1, logText: "Execução anterior interrompida." },
+    });
+    return tx.collectionRun.create({ data: { adapterId: adapter.id, status: "RUNNING", triggerType, startedAt } });
   });
 
   const ctx = {
@@ -103,7 +107,14 @@ export async function executeAdapterCollection(
   try {
     switch (adapter.adapterKey) {
       case "imprensa-oficial-sjrp":
+        const editions = await collectOfficialEditions();
         result = await runImprensaOficialCollector(ctx);
+        result.itemsFound += editions.itemsFound;
+        result.itemsProcessed += editions.itemsProcessed;
+        result.itemsDuplicated += editions.itemsDuplicated;
+        result.logText += "\n" + editions.logText;
+        result.errorCount += editions.errorCount;
+        if (editions.errorCount && result.status === "SUCCESS") result.status = "PARTIAL";
         break;
       case "pncp-api-sjrp":
         result = await runPncpCollector({
@@ -153,29 +164,31 @@ export async function executeAdapterCollection(
     hasPendingPages: Boolean(result.hasPendingPages),
   };
 
-  await prisma.collectionRun.update({
-    where: { id: run.id },
-    data: {
-      status: result.status,
-      finishedAt,
-      itemsFound: result.itemsFound,
-      itemsProcessed: result.itemsProcessed,
-      itemsDuplicated: result.itemsDuplicated,
-      errorCount: result.errorCount,
-      logText: result.logText,
-      checkpointJson: JSON.stringify(mergedCheckpoint),
-    },
-  });
+  await prisma.$transaction([
+    prisma.collectionRun.updateMany({
+      where: { id: run.id, status: "RUNNING" },
+      data: {
+        status: result.status,
+        finishedAt,
+        itemsFound: result.itemsFound,
+        itemsProcessed: result.itemsProcessed,
+        itemsDuplicated: result.itemsDuplicated,
+        errorCount: result.errorCount,
+        logText: result.logText,
+        checkpointJson: JSON.stringify(mergedCheckpoint),
+      },
+    }),
 
-  await prisma.integrationAdapter.update({
-    where: { id: adapter.id },
-    data: {
-      status: result.status,
-      lastSuccessAt: result.status === "SUCCESS" ? finishedAt : undefined,
-      recordsCount: { increment: result.itemsProcessed },
-      lastError: buildAdapterErrorSummary(result),
-    },
-  });
+    prisma.integrationAdapter.updateMany({
+      where: { id: adapter.id, lastRunAt: startedAt, status: "RUNNING" },
+      data: {
+        status: result.status,
+        lastSuccessAt: result.status === "SUCCESS" ? finishedAt : undefined,
+        recordsCount: { increment: result.itemsProcessed },
+        lastError: buildAdapterErrorSummary(result),
+      },
+    })
+  ]);
 
   return { runId: run.id, adapterKey, ...result };
 }

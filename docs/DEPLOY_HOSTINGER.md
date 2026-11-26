@@ -87,9 +87,11 @@ AI_MONTHLY_BUDGET_BRL="50.00"
 
 ---
 
-## 5. Configuração dos Cron Jobs da Hostinger
+## 5. Coleta automática
 
-No hPanel em **Avançado → Cron Jobs**, adicione uma tarefa agendada (por exemplo, a cada 4 horas: `0 */4 * * *`) apontando para o endpoint protegido:
+Ao iniciar em produção, o servidor Node verifica a agenda das fontes ativas a cada minuto no fuso de São Paulo. Na primeira execução coleta as fontes sem histórico. Nas seguintes, usa o campo `frequencyCron` de cada adaptador. O histórico fica em `/admin/integracoes`. Mantenha a aplicação Node em execução contínua.
+
+Para usar exclusivamente um agendador externo, configure `RADAR_AUTO_COLLECT=off`. No hPanel em **Avançado → Cron Jobs**, a rotina pode chamar o endpoint protegido:
 
 ```bash
 curl -s -X POST -H "Authorization: Bearer SEU_CRON_SECRET" https://radar.roqueconsultoriadigital.com.br/api/cron/collect > /dev/null

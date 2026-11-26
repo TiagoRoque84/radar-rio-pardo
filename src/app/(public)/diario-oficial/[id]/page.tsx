@@ -25,7 +25,7 @@ export default async function DiarioEdicaoDetalhePage({
     },
   });
 
-  if (!edition || edition.status !== "PUBLISHED") {
+  if (!edition || !["PUBLISHED", "AUTO_PUBLISHED"].includes(edition.status)) {
     notFound();
   }
 
@@ -60,16 +60,17 @@ export default async function DiarioEdicaoDetalhePage({
         </div>
         <p className="text-sm text-radar-muted dark:text-slate-300">
           Data da edição: <strong>{formatDateBR(edition.publicationDate)}</strong>{" "}
-          • {edition.acts.length} ato(s) aprovado(s) para publicação.
+          • {edition.status === "AUTO_PUBLISHED" ? "Edição coletada automaticamente" : edition.acts.length + " ato(s) aprovado(s) para publicação."}
         </p>
         {edition.summaryText && (
-          <p className="text-sm leading-relaxed border-t border-radar-border pt-3">
+          <p className="whitespace-pre-line text-sm leading-relaxed border-t border-radar-border pt-3">
+            {edition.status === "AUTO_PUBLISHED" && <strong className="block">Resumo automático da edição</strong>}
             {edition.summaryText}
           </p>
         )}
       </header>
 
-      <section className="space-y-4">
+      {edition.acts.length > 0 && <section className="space-y-4">
         <h2 className="text-xl font-bold">Atos desta edição</h2>
         {edition.acts.map((act) => (
           <article key={act.id} className="radar-card p-5 space-y-3">
@@ -109,7 +110,7 @@ export default async function DiarioEdicaoDetalhePage({
             </div>
           </article>
         ))}
-      </section>
+      </section>}
     </div>
   );
 }
