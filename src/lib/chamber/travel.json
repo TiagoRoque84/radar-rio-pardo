@@ -1,0 +1,1237 @@
+[
+  {
+    "year": 2025,
+    "month": 12,
+    "payments": [
+      {
+        "id": "640683057",
+        "commitment": "0086-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 3800,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "640683058",
+        "commitment": "0084-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 30569,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "640683072",
+        "commitment": "0097-2025",
+        "authors": [
+          "136",
+          "144"
+        ],
+        "date": "25/03/2025",
+        "cents": 32149,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "640683550",
+        "commitment": "0085-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 0,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "640683553",
+        "commitment": "0083-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 12120,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "640683559",
+        "commitment": "0088-2025",
+        "authors": [
+          "90"
+        ],
+        "date": "11/03/2025",
+        "cents": 13420,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "640683560",
+        "commitment": "0099-2025",
+        "authors": [
+          "136",
+          "144"
+        ],
+        "date": "25/03/2025",
+        "cents": 25485,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "640683563",
+        "commitment": "0090-2025",
+        "authors": [
+          "90"
+        ],
+        "date": "11/03/2025",
+        "cents": 44793,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "640683564",
+        "commitment": "0081-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 32276,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "640683565",
+        "commitment": "0082-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/03/2025",
+        "cents": 50000,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "640683572",
+        "commitment": "0089-2025",
+        "authors": [
+          "90"
+        ],
+        "date": "11/03/2025",
+        "cents": 4558,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "640683574",
+        "commitment": "0091-2025",
+        "authors": [
+          "90"
+        ],
+        "date": "11/03/2025",
+        "cents": 3500,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "640684010",
+        "commitment": "0098-2025",
+        "authors": [
+          "136",
+          "144"
+        ],
+        "date": "25/03/2025",
+        "cents": 13420,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "640684021",
+        "commitment": "0087-2025",
+        "authors": [
+          "90"
+        ],
+        "date": "11/03/2025",
+        "cents": 35834,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "640684023",
+        "commitment": "0100-2025",
+        "authors": [
+          "136",
+          "144"
+        ],
+        "date": "25/03/2025",
+        "cents": 0,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "643075711",
+        "commitment": "0140-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "16/04/2025",
+        "cents": 53751,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "643075716",
+        "commitment": "0134-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "11/04/2025",
+        "cents": 0,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "643075724",
+        "commitment": "0137-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "16/04/2025",
+        "cents": 25000,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "643075728",
+        "commitment": "0133-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "11/04/2025",
+        "cents": 25940,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "643076028",
+        "commitment": "0139-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "16/04/2025",
+        "cents": 32415,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "643076029",
+        "commitment": "0131-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "11/04/2025",
+        "cents": 44706,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "643076203",
+        "commitment": "0141-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "16/04/2025",
+        "cents": 26876,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "643076213",
+        "commitment": "0132-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "11/04/2025",
+        "cents": 13420,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "643076669",
+        "commitment": "0138-2025",
+        "authors": [
+          "145"
+        ],
+        "date": "16/04/2025",
+        "cents": 5160,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "645502851",
+        "commitment": "0189-2025",
+        "authors": [
+          "89"
+        ],
+        "date": "27/05/2025",
+        "cents": 13750,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "645502858",
+        "commitment": "0163-2025",
+        "authors": [
+          "115"
+        ],
+        "date": "05/05/2025",
+        "cents": 13420,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "645502873",
+        "commitment": "0188-2025",
+        "authors": [
+          "89"
+        ],
+        "date": "27/05/2025",
+        "cents": 50000,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "645503363",
+        "commitment": "0165-2025",
+        "authors": [
+          "115"
+        ],
+        "date": "05/05/2025",
+        "cents": 0,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "645503364",
+        "commitment": "0164-2025",
+        "authors": [
+          "115"
+        ],
+        "date": "05/05/2025",
+        "cents": 19157,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "645503840",
+        "commitment": "0187-2025",
+        "authors": [
+          "89"
+        ],
+        "date": "27/05/2025",
+        "cents": 18825,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "645503849",
+        "commitment": "0162-2025",
+        "authors": [
+          "115"
+        ],
+        "date": "05/05/2025",
+        "cents": 29593,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "645503856",
+        "commitment": "0186-2025",
+        "authors": [
+          "89"
+        ],
+        "date": "27/05/2025",
+        "cents": 8260,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "645503863",
+        "commitment": "0185-2025",
+        "authors": [
+          "89"
+        ],
+        "date": "27/05/2025",
+        "cents": 14187,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "647866963",
+        "commitment": "0207-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "03/06/2025",
+        "cents": 25084,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "650536513",
+        "commitment": "0254-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 80626,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "650536799",
+        "commitment": "0258-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 8959,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "650536800",
+        "commitment": "0257-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 53751,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "650536823",
+        "commitment": "0253-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 53751,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "650537066",
+        "commitment": "0255-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 17917,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "650537067",
+        "commitment": "0259-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "30/07/2025",
+        "cents": 59565,
+        "category": "PASSAGENS PARA O PAÍS"
+      },
+      {
+        "id": "650537072",
+        "commitment": "0256-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": 71668,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "652810328",
+        "commitment": "0312-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": 30459,
+        "category": "PASSAGENS PARA O PAÍS"
+      },
+      {
+        "id": "652810836",
+        "commitment": "0298-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "22/08/2025",
+        "cents": 7166,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "652810837",
+        "commitment": "0297-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "22/08/2025",
+        "cents": 53751,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "652810838",
+        "commitment": "0255-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -11117,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "652810840",
+        "commitment": "0314-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": 17917,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "652811332",
+        "commitment": "0286-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "07/08/2025",
+        "cents": 5917,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "652811336",
+        "commitment": "0256-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -20134,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "652811514",
+        "commitment": "0296-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "22/08/2025",
+        "cents": 62710,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "652811519",
+        "commitment": "0313-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": 30459,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "652811525",
+        "commitment": "0257-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -4769,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "652811837",
+        "commitment": "0253-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -13101,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "652812027",
+        "commitment": "0254-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -5627,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "652812028",
+        "commitment": "0258-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "28/07/2025",
+        "cents": -1959,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "655226450",
+        "commitment": "0343-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": 7167,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "655226458",
+        "commitment": "0342-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": 17917,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "655226949",
+        "commitment": "0298-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "22/08/2025",
+        "cents": -7166,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "655226950",
+        "commitment": "0346-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": 17917,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "655226958",
+        "commitment": "0296-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "22/08/2025",
+        "cents": -39540,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "655226962",
+        "commitment": "0345-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": 50168,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "655227454",
+        "commitment": "0344-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": 16125,
+        "category": "PASSAGENS PARA O PAÍS"
+      },
+      {
+        "id": "655227463",
+        "commitment": "0313-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": -25279,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "655227471",
+        "commitment": "0314-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": -11129,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "655227476",
+        "commitment": "0312-2025",
+        "authors": [
+          "147"
+        ],
+        "date": "27/08/2025",
+        "cents": -17469,
+        "category": "PASSAGENS PARA O PAÍS"
+      },
+      {
+        "id": "657875104",
+        "commitment": "0344-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": -16125,
+        "category": "PASSAGENS PARA O PAÍS"
+      },
+      {
+        "id": "657875613",
+        "commitment": "0382-2025",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "16/10/2025",
+        "cents": 31170,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "657875624",
+        "commitment": "0380-2025",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "16/10/2025",
+        "cents": 35802,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "657875626",
+        "commitment": "0383-2025",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "16/10/2025",
+        "cents": 3000,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "657876110",
+        "commitment": "0345-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": -28988,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "657876111",
+        "commitment": "0381-2025",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "16/10/2025",
+        "cents": 14300,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "657876123",
+        "commitment": "0346-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": -10917,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "657876124",
+        "commitment": "0343-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "16/09/2025",
+        "cents": -687,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "660150731",
+        "commitment": "0421-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "11/11/2025",
+        "cents": 15834,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "662677804",
+        "commitment": "0473-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "08/12/2025",
+        "cents": 35300,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "662677817",
+        "commitment": "0475-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "08/12/2025",
+        "cents": 21680,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "662678318",
+        "commitment": "0476-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "08/12/2025",
+        "cents": 10000,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "662678325",
+        "commitment": "0474-2025",
+        "authors": [
+          "146"
+        ],
+        "date": "08/12/2025",
+        "cents": 13360,
+        "category": "PEDÁGIOS"
+      }
+    ]
+  },
+  {
+    "year": 2026,
+    "month": 9,
+    "payments": [
+      {
+        "id": "673489791",
+        "commitment": "41-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": 16849,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673489792",
+        "commitment": "42-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": 28082,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673490273",
+        "commitment": "32-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": 16849,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673490274",
+        "commitment": "37-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "27/01/2026",
+        "cents": 20610,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673490276",
+        "commitment": "33-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": 26209,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673490314",
+        "commitment": "35-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "27/01/2026",
+        "cents": 37442,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673490318",
+        "commitment": "31-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": 37442,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673490320",
+        "commitment": "43-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": 7488,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673490322",
+        "commitment": "39-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": 37442,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673490325",
+        "commitment": "34-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": 7489,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673490326",
+        "commitment": "38-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "27/01/2026",
+        "cents": 5000,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673490327",
+        "commitment": "40-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": 56163,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "673490802",
+        "commitment": "36-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "27/01/2026",
+        "cents": 14480,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673830450",
+        "commitment": "43-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": -4688,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673830453",
+        "commitment": "34-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": -4989,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673830945",
+        "commitment": "41-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": -2549,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673830949",
+        "commitment": "32-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": -16849,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673830950",
+        "commitment": "39-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": -12971,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673830961",
+        "commitment": "40-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": -6163,
+        "category": "OUTRAS DESPESAS COM LOCOMOÇÃO"
+      },
+      {
+        "id": "673830963",
+        "commitment": "33-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": -1629,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673830966",
+        "commitment": "76-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/02/2026",
+        "cents": 27770,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673831449",
+        "commitment": "31-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "27/01/2026",
+        "cents": -10934,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673831468",
+        "commitment": "42-2026",
+        "authors": [
+          "89"
+        ],
+        "date": "27/01/2026",
+        "cents": -18073,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673897433",
+        "commitment": "133-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": 26209,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673897438",
+        "commitment": "119-2026",
+        "authors": [
+          "90"
+        ],
+        "date": "03/03/2026",
+        "cents": 15750,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673897445",
+        "commitment": "121-2026",
+        "authors": [
+          "90"
+        ],
+        "date": "03/03/2026",
+        "cents": 0,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673897446",
+        "commitment": "131-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": 37442,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673897620",
+        "commitment": "120-2026",
+        "authors": [
+          "90"
+        ],
+        "date": "03/03/2026",
+        "cents": 46803,
+        "category": "HOSPEDAGENS"
+      },
+      {
+        "id": "673897933",
+        "commitment": "134-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": 7489,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673897938",
+        "commitment": "118-2026",
+        "authors": [
+          "90"
+        ],
+        "date": "03/03/2026",
+        "cents": 14300,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673898119",
+        "commitment": "117-2026",
+        "authors": [
+          "90"
+        ],
+        "date": "03/03/2026",
+        "cents": 37442,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673898439",
+        "commitment": "132-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": 16849,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673897649",
+        "commitment": "132-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": -16849,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673898127",
+        "commitment": "183-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "24/04/2026",
+        "cents": 0,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673898130",
+        "commitment": "181-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "24/04/2026",
+        "cents": 0,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "673898141",
+        "commitment": "134-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": -7489,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "673898636",
+        "commitment": "182-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "24/04/2026",
+        "cents": 0,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "673898642",
+        "commitment": "180-2026",
+        "authors": [
+          "145"
+        ],
+        "date": "24/04/2026",
+        "cents": 0,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "673898644",
+        "commitment": "133-2026",
+        "authors": [
+          "146"
+        ],
+        "date": "10/03/2026",
+        "cents": -7459,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "676652702",
+        "commitment": "245-2026",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "09/06/2026",
+        "cents": 8840,
+        "category": "PEDÁGIOS"
+      },
+      {
+        "id": "676653184",
+        "commitment": "247-2026",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "09/06/2026",
+        "cents": 2300,
+        "category": "OUTROS SERVIÇOS DE TERCEIROS - PESSOA JURÍDICA"
+      },
+      {
+        "id": "676653186",
+        "commitment": "246-2026",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "09/06/2026",
+        "cents": 22000,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      },
+      {
+        "id": "676653199",
+        "commitment": "244-2026",
+        "authors": [
+          "145",
+          "34"
+        ],
+        "date": "09/06/2026",
+        "cents": 48215,
+        "category": "COMBUSTÍVEIS E LUBRIFICANTES AUTOMOTIVOS"
+      },
+      {
+        "id": "681153943",
+        "commitment": "341-2026",
+        "authors": [
+          "136",
+          "144"
+        ],
+        "date": "25/08/2026",
+        "cents": 17740,
+        "category": "FORNECIMENTO DE ALIMENTAÇÃO"
+      }
+    ]
+  }
+]

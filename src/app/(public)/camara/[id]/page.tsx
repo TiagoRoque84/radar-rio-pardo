@@ -1,3 +1,4 @@
+import { CouncilTravel } from "@/components/CouncilTravel";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { chamberAuthors, productionTypes, productionUrl } from "@/lib/chamber/production";
@@ -18,10 +19,7 @@ export default async function CouncilorPage({ params }: { params: Promise<{ id: 
       <ul>{types.map(row => <li key={row.type}><a className="flex justify-between border-b py-2 text-radar-blue hover:underline" href={source + "&t=" + row.type}><span>{row.name}</span><strong>{row.count}</strong></a></li>)}</ul>
       <a className="text-radar-blue underline" href={source}>Ficha de produção na Câmara</a>
     </section>
-    <section className="radar-card p-5 space-y-3"><h2 className="text-xl font-bold">Despesas do mandato</h2>
-      <p>A apuração das despesas individuais de 2025–2028 está em andamento. O total pago por mandato ainda está indisponível.</p>
-      <a className="text-radar-blue underline" href="https://camarasaojosedoriopardo.atende.net/transparencia/item/relacao-funcionario-x-salario">Consultar cargos e subsídios</a>
-    </section>
+    <CouncilTravel id={id} />
     {id === "90" && <section className="radar-card p-5 space-y-3"><h2 className="text-xl font-bold">Histórico · novembro de 2024</h2>
       <p>O empenho 0390-2024 identifica Rubens Lobato como participante de uma viagem a São Paulo para reunião com deputado estadual. Para alimentação, a Câmara empenhou R$ 342,58, anulou R$ 277,52 e registrou R$ 65,06 pagos. O credor registrado é outra pessoa.</p>
       <p><a className="underline" href="https://transparencia.tce.sp.gov.br/municipio/sao-jose-do-rio-pardo/2024/despesas/detalhe/630660046">Histórico do empenho</a> · <a className="underline" href="https://transparencia.tce.sp.gov.br/api/json/despesas/sao-jose-do-rio-pardo/2024/11">Pagamentos e anulações do mês</a></p>
